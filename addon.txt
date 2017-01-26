@@ -1,0 +1,8 @@
+"AddonInfo"
+{
+	"name"				"Dynamic NPCs"
+	"version"			"1"
+	"author_name"		"CodeNil"
+	"info"				""
+	"override"			"0"
+}
