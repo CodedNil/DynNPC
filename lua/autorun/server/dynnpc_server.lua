@@ -69,6 +69,7 @@ local Data = util.JSONToTable(file.Read("codenil/dynnpc/" .. game.GetMap():lower
 local function UpdateData()
 	file.Write("codenil/dynnpc/" .. game.GetMap():lower() .. "/npcpos.txt", util.TableToJSON(Data, false), "DATA")
 end
+
 for i, v in pairs(DynNPC.NPCs) do
 	if not Data[i] then
 		Data[i] = {default = {Vector(0, 0, 0), Angle(0, 0, 0)}}
