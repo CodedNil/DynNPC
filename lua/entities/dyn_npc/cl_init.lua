@@ -1,5 +1,6 @@
 include("shared.lua")
 
+function ENT:Initialize()
 	self.AutomaticFrameAdvance = true
 	self.Rotation = 90
 end
