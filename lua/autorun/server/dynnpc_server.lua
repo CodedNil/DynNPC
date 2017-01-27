@@ -111,6 +111,13 @@ local function AddNPC(i, PosKey, Key)
 		if not self.Hiding and self.Dynamic then
 			local Should, HideTime = self:ShouldRelocate()
 			local NPosKey = table.Random(Data[i])
+			if NPosKey[1] == self:GetPos(PosKey[1]) then
+				local n = 0
+				repeat
+					NPosKey = table.Random(Data[i])
+					n = n + 1
+				until NPosKey[1] == self:GetPos(PosKey[1]) or n == 10
+			end
 			if Should and NPosKey then
 				if HideTime then
 					self.Hiding = true
