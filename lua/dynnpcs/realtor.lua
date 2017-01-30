@@ -139,8 +139,8 @@ net.Receive("PropertiesDevNet", function(Len, Plr)
 		if v ~= Plr then
 			local Tbl = table.Copy(Data[PropertyName])
 			local NewDoors = {}
-			for _, v in pairs(Tbl.Doors) do
-				NewDoors[#NewDoors + 1] = DarkRP.doorIndexToEnt(v)
+			for _, x in pairs(Tbl.Doors) do
+				NewDoors[#NewDoors + 1] = DarkRP.doorIndexToEnt(x)
 			end
 			Tbl.Doors = NewDoors
 			net.Start("PropertiesDevNet")
