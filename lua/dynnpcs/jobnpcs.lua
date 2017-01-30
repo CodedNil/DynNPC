@@ -1,5 +1,5 @@
 DynNPC:RegisterNPC("Police Commissioner", {
-	Model = "models/taggart/police01/male_02.mdl",
+	Model = "Police",
 	Animation = "ArmsSide",
 	Dynamic = false,
 	Sounds = {
@@ -11,7 +11,7 @@ DynNPC:RegisterNPC("Police Commissioner", {
 })
 
 DynNPC:RegisterNPC("Hospital Director", {
-	Model = "models/taggart/police02/male_02.mdl",
+	Model = "Paramedic",
 	Animation = "ArmsCrossed",
 	Dynamic = false,
 	Sounds = {

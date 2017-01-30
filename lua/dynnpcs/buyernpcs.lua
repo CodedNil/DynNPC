@@ -1,5 +1,5 @@
 DynNPC:RegisterNPC("Junkie", {
-	Model = "models/player/group03/male_03.mdl",
+	Model = "Thug",
 	Animation = "Scared",
 	Dynamic = true,
 	ShouldRelocate = function(self)

@@ -2,9 +2,43 @@ DynNPC = {}
 
 DynNPC.NPCs = {}
 
+local function GenerateModelList(Path, Num)
+	local New = {}
+	for i = 1, Num do
+		local ni = i < 10 and "0" .. tostring(i) or tostring(i)
+		table.insert(New, string.Replace(Path, "*", ni))
+	end
+	return New
+end
+
+local PlayerModels = {
+	Citizen = table.Merge(GenerateModelList("models/player/group01/male_*.mdl", 9), GenerateModelList("models/player/group01/female_*.mdl", 6)),
+	Thug = table.Merge(GenerateModelList("models/player/group03/male_*.mdl", 9), GenerateModelList("models/player/group03/female_*.mdl", 6)),
+	Scientist = "models/player/scientist.mdl",
+	Security = GenerateModelList("models/player/guard_pack/guard_*.mdl", 9),
+
+	Police = GenerateModelList("models/taggart/police01/male_*.mdl", 9),
+	Paramedic = GenerateModelList("models/taggart/police02/male_*.mdl", 9),
+	Swat = "models/payday2/units/blue_swat_player.mdl",
+	HeavySwat = "models/payday2/units/heavy_swat_player.mdl",
+	President = "models/Player/Donald_Trump.mdl",
+
+	SuitsClosedCoatTie = GenerateModelList("models/player/Suits/male_*_closed_coat_tie.mdl", 9),
+	SuitsClosedTie = GenerateModelList("models/player/Suits/male_*_closed_tie.mdl", 9),
+	SuitsOpen = GenerateModelList("models/player/Suits/male_*_open.mdl", 9),
+	SuitsOpenTie = GenerateModelList("models/player/Suits/male_*_open_tie.mdl", 9),
+	SuitsOpenWaistcoat = GenerateModelList("models/player/Suits/male_*_open_waistcoat.mdl", 9),
+	SuitsShirt = GenerateModelList("models/player/Suits/male_*_shirt.mdl", 9),
+	SuitsShirtTie = GenerateModelList("models/player/Suits/male_*_shirt_tie.mdl", 9),
+}
+
 function DynNPC:RegisterNPC(Name, Tbl)
 	DynNPC.NPCs[Name] = Tbl
 	DynNPC.NPCs[Name].Options = DynNPC.NPCs[Name].Options or {}
+	DynNPC.NPCs[Name].Model = PlayerModels[DynNPC.NPCs[Name].Model] or DynNPC.NPCs[Name].Model
+	if type(DynNPC.NPCs[Name].Model) == "table" then
+		DynNPC.NPCs[Name].Model = table.Random(DynNPC.NPCs[Name].Model)
+	end
 	if Tbl.Jobs then
 		for _, v in pairs(Tbl.Jobs) do
 			DynNPC.NPCs[Name].Options[#DynNPC.NPCs[Name].Options + 1] = {
@@ -60,6 +94,9 @@ if not file.IsDir("codenil", "DATA") then
 end
 if not file.IsDir("codenil/dynnpc/" .. game.GetMap():lower(), "DATA") then
 	file.CreateDir("codenil/dynnpc/" .. game.GetMap():lower(), "DATA")
+end
+if not file.IsDir("codenil/dynnpc/" .. game.GetMap():lower() .. "/backups", "DATA") then
+	file.CreateDir("codenil/dynnpc/" .. game.GetMap():lower() .. "/backups", "DATA")
 end
 if not file.Exists("codenil/dynnpc/" .. game.GetMap():lower() .. "/npcpos.txt", "DATA" ) then
 	file.Write("codenil/dynnpc/" .. game.GetMap():lower() .. "/npcpos.txt", "", "DATA")
@@ -138,18 +175,23 @@ local function AddNPC(i, PosKey, Key)
 		if IsValid(Plr) and Plr:IsPlayer() and not EntityDebounces[Plr] then
 			EntityDebounces[Plr] = true
 			timer.Simple(1, function() EntityDebounces[Plr] = nil end)
-			local Tbl = {}
-			for _, v in pairs(DynNPC.NPCs[i].Options) do
-				if v.Requirement(Plr) then
-					Tbl[#Tbl + 1] = v.Name
-				end
-			end
 			self:Speak(0.5, DynNPC.NPCs[i].Sounds.Hi)
-			net.Start("DynNPCMenu")
-				net.WriteString(i)
-				net.WriteEntity(New)
-				net.WriteTable(Tbl)
-			net.Send(Plr)
+			if DynNPC.NPCs[i].CustomNetFunc then
+				net.Start(DynNPC.NPCs[i].CustomNetFunc)
+				net.Send(Plr)
+			else
+				local Tbl = {}
+				for _, v in pairs(DynNPC.NPCs[i].Options) do
+					if v.Requirement(Plr) then
+						Tbl[#Tbl + 1] = v.Name
+					end
+				end
+				net.Start("DynNPCMenu")
+					net.WriteString(i)
+					net.WriteEntity(New)
+					net.WriteTable(Tbl)
+				net.Send(Plr)
+			end
 		end
 	end
 
