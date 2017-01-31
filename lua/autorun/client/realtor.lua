@@ -31,6 +31,18 @@ hook.Add("SetupPlayerVisibility", "PropertiesRenderCameras", function()
 	end
 end)
 
+hook.Add("GetMapWaypoints", "PropertiesMapWaypoints", function()
+	for i, v in pairs(LocalPropertyList) do
+		local AvgPos
+		for _, x in pairs(v.Doors) do
+			AvgPos = not AvgPos and x or (AvgPos + x) / 2
+		end
+		if AvgPos then
+			GreyRP.MapWaypoints[#GreyRP.MapWaypoints + 1] = AvgPos
+		end
+	end
+end)
+
 PropertyRTTextures = PropertyRTTextures or {}
 local function GetRTTexture(Key)
 	if not PropertyRTTextures[Key] then
