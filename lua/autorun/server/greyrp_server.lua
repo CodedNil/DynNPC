@@ -34,7 +34,7 @@ function GreyRP.SetData(Name, Data)
 end
 
 timer.Simple(0.1, function()
-	for _, v in pairs(file.Find("greyrp_modules/*.lua", "LUA")) do
-		include("greyrp_modules/" .. v)
+	for _, v in pairs(file.Find("greyrp_modules/server/*.lua", "LUA")) do
+		include("greyrp_modules/server/" .. v)
 	end
 end)

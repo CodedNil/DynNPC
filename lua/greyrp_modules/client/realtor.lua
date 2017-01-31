@@ -92,9 +92,15 @@ net.Receive("PropertiesMenuNet", function(Len, Plr)
 			net.WriteString(CurMenuProperty)
 		net.SendToServer()
 	end
+	function BuyButton:Paint(w, h)
+		self:SetTextColor(self.Hovered and Color(80, 80, 80, 255) or Color(255, 255, 255, 255))
+		surface.SetDrawColor(self.Hovered and Color(155, 242, 236, 255) or Color(74, 211, 202, 255))
+		surface.DrawRect(0, 0, w, h)
+	end
 	local SellButton = vgui.Create("Button", BottomFrame)
 	SellButton:SetWide(ScrW() * 0.1)
 	SellButton:Dock(LEFT)
+	SellButton:DockMargin(15, 0, 0, 0)
 	SellButton:SetFont("DYNNPC_FONT_LARGE")
 	SellButton:SetText("SELL")
 	function SellButton:DoClick()
@@ -102,6 +108,11 @@ net.Receive("PropertiesMenuNet", function(Len, Plr)
 			net.WriteString("Sell")
 			net.WriteString(CurMenuProperty)
 		net.SendToServer()
+	end
+	function SellButton:Paint(w, h)
+		self:SetTextColor(self.Hovered and Color(80, 80, 80, 255) or Color(255, 255, 255, 255))
+		surface.SetDrawColor(self.Hovered and Color(155, 242, 236, 255) or Color(74, 211, 202, 255))
+		surface.DrawRect(0, 0, w, h)
 	end
 
 	local PictureFrame = vgui.Create("Panel", Frame)
@@ -288,7 +299,7 @@ local function OpenMenu()
 	Menu:SetSize(200 * Scale, 100)
 	Menu:SetTitle("PropertyDev")
 	Menu:ShowCloseButton(true)
-	Menu:SetDraggable(false)
+	Menu:SetDraggable(true)
 	Menu:MakePopup()
 	Menu.lblTitle:SetFont("DYNNPC_FONT_LARGE")
 	function Menu:Paint(w, h)
@@ -396,6 +407,10 @@ local function OpenMenu()
 	Menu:CenterHorizontal(0.9)
 end
 
+concommand.Add("propertydevmode", function()
+	OpenMenu()
+end)
+
 hook.Add("HUDPaint", "PropertyInfoHud", function()
 	if IsValid(Menu) then
 		local Houses = {}
@@ -407,6 +422,8 @@ hook.Add("HUDPaint", "PropertyInfoHud", function()
 				Houses[#Houses + 1] = i
 			end
 		end
+		table.SortByMember(Houses, 1, true)
+		table.SortByMember(Businesses, 1, true)
 
 		local MaxX = 0
 		surface.SetFont("DermaDefault")
@@ -514,8 +531,4 @@ hook.Add("HUDPaint", "PropertyInfo3dHud", function()
 			cam.End3D()
 		end
 	end
-end)
-
-concommand.Add("propertydevmode", function()
-	OpenMenu()
 end)
