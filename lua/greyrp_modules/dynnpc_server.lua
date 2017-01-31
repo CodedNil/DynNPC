@@ -1,3 +1,8 @@
+local Data = GreyRP.GetData("npcpos")
+local function UpdateData()
+	GreyRP.SetData("npcpos", Data)
+end
+
 DynNPC = {}
 
 DynNPC.NPCs = {}
@@ -68,8 +73,8 @@ function DynNPC:RegisterNPC(Name, Tbl)
 	end
 end
 
-for _, v in pairs(file.Find("dynnpcs/*.lua", "LUA")) do
-	include("dynnpcs/" .. v)
+for _, v in pairs(file.Find("greyrp_modules/dynnpcs/*.lua", "LUA")) do
+	include("greyrp_modules/dynnpcs/" .. v)
 end
 
 local Animations = {
@@ -87,24 +92,6 @@ local DynNPCs = {}
 
 for _, v in pairs(ents.FindByClass("dyn_npc")) do
 	v:Remove()
-end
-
-if not file.IsDir("codenil", "DATA") then
-	file.CreateDir("codenil", "DATA")
-end
-if not file.IsDir("codenil/dynnpc/" .. game.GetMap():lower(), "DATA") then
-	file.CreateDir("codenil/dynnpc/" .. game.GetMap():lower(), "DATA")
-end
-if not file.IsDir("codenil/dynnpc/" .. game.GetMap():lower() .. "/backups", "DATA") then
-	file.CreateDir("codenil/dynnpc/" .. game.GetMap():lower() .. "/backups", "DATA")
-end
-if not file.Exists("codenil/dynnpc/" .. game.GetMap():lower() .. "/npcpos.txt", "DATA" ) then
-	file.Write("codenil/dynnpc/" .. game.GetMap():lower() .. "/npcpos.txt", "", "DATA")
-end
-local Data = util.JSONToTable(file.Read("codenil/dynnpc/" .. game.GetMap():lower() .. "/npcpos.txt", "DATA")) or {}
-
-local function UpdateData()
-	file.Write("codenil/dynnpc/" .. game.GetMap():lower() .. "/npcpos.txt", util.TableToJSON(Data, false), "DATA")
 end
 
 for i, v in pairs(DynNPC.NPCs) do
@@ -243,7 +230,6 @@ local function RefreshNPC(Key)
 		for i, v in pairs(Data[Key]) do
 			local Ent = DynNPCs[Key][i]
 			local PosKey = Data[Key][i]
-			print(i, Key, Ent)
 			if not IsValid(Ent) then
 				Ent = AddNPC(Key, v, PosKey)
 			end

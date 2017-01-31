@@ -10,18 +10,9 @@ DynNPC:RegisterNPC("Realtor", {
 	CustomNetFunc = "PropertiesMenuNet"
 })
 
-if not file.Exists("codenil/dynnpc/" .. game.GetMap():lower() .. "/properties.txt", "DATA" ) then
-	file.Write("codenil/dynnpc/" .. game.GetMap():lower() .. "/properties.txt", "", "DATA")
-end
-local Data = util.JSONToTable(file.Read("codenil/dynnpc/" .. game.GetMap():lower() .. "/properties.txt", "DATA")) or {}
-
-local BackupData
+local Data = GreyRP.GetData("properties")
 local function UpdateData()
-	if BackupData then
-		file.Write("codenil/dynnpc/" .. game.GetMap():lower() .. "/backups/properties" .. os.date(",%d,%m,%Y,%H", os.time()) .. ".txt", util.TableToJSON(BackupData, false), "DATA")
-	end
-	BackupData = Data
-	file.Write("codenil/dynnpc/" .. game.GetMap():lower() .. "/properties.txt", util.TableToJSON(Data, false), "DATA")
+	GreyRP.SetData("properties", Data)
 end
 
 hook.Add("SetupPlayerVisibility", "PropertiesRenderCameras", function()
