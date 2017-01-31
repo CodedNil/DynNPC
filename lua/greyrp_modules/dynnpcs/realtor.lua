@@ -1,12 +1,6 @@
 DynNPC:RegisterNPC("Realtor", {
 	Model = "SuitsClosedTie",
 	Animation = "Standing",
-	Dynamic = false,
-	Sounds = {
-		Hi = "vo/npc/male01/hi01.wav",
-		Ok = "vo/npc/male01/ok01.wav",
-		Cancel = "vo/npc/male01/busy02.wav"
-	},
 	CustomNetFunc = "PropertiesMenuNet"
 })
 

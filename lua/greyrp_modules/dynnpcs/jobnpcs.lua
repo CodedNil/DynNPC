@@ -1,24 +1,12 @@
 DynNPC:RegisterNPC("Police Commissioner", {
 	Model = "Police",
 	Animation = "ArmsSide",
-	Dynamic = false,
-	Sounds = {
-		Hi = "vo/npc/male01/hi01.wav",
-		Ok = "vo/npc/male01/ok01.wav",
-		Cancel = "vo/npc/male01/busy02.wav"
-	},
 	Jobs = {{"Enlist in the police", TEAM_POLICE}, {"Become a SWAT", TEAM_SWAT}}
 })
 
 DynNPC:RegisterNPC("Hospital Director", {
 	Model = "Paramedic",
 	Animation = "ArmsCrossed",
-	Dynamic = false,
-	Sounds = {
-		Hi = "vo/npc/male01/hi01.wav",
-		Ok = "vo/npc/male01/ok01.wav",
-		Cancel = "vo/npc/male01/busy02.wav"
-	},
 	Options = {
 		{
 			Name = "Get healed $100",

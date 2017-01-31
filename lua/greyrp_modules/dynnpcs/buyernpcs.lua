@@ -10,12 +10,6 @@ DynNPC:RegisterNPC("Junkie", {
 		end
 		return CurTime() - self.LastRelocate > 240
 	end,
-	Sounds = {
-		Hi = "vo/eli_lab/eli_greeting.wav",
-		Ok = "vo/eli_lab/al_ugh.wav",
-		Cancel = "vo/eli_lab/al_wasted01.wav",
-		Run = "vo/npc/male01/strider_run.wav"
-	},
 	Options = {
 		{
 			Name = "Sell me stuff",

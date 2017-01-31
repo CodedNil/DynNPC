@@ -40,6 +40,8 @@ local PlayerModels = {
 function DynNPC:RegisterNPC(Name, Tbl)
 	DynNPC.NPCs[Name] = Tbl
 	DynNPC.NPCs[Name].Options = DynNPC.NPCs[Name].Options or {}
+	DynNPC.NPCs[Name].Dynamic = DynNPC.NPCs[Name].Dynamic or false
+	DynNPC.NPCs[Name].Sounds = DynNPC.NPCs[Name].Sounds or {Hi = "vo/npc/male01/hi01.wav", Ok = "vo/npc/male01/ok01.wav", Cancel = "vo/npc/male01/busy02.wav", Run = "vo/npc/male01/strider_run.wav"}
 	DynNPC.NPCs[Name].Model = PlayerModels[DynNPC.NPCs[Name].Model] or DynNPC.NPCs[Name].Model
 	if type(DynNPC.NPCs[Name].Model) == "table" then
 		DynNPC.NPCs[Name].Model = table.Random(DynNPC.NPCs[Name].Model)
