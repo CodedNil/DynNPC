@@ -43,7 +43,7 @@ function GreyRP:SetupMapPanel(sx, sy, sz, Id)
 		end
 	end
 
-	function self:Render()
+	function self:Paint(w, h)
 		if RealTime() - self.LastUpdate > 0.1 then
 			net.Start("MapPositionData")
 				net.WriteVector(self:GetVector())
@@ -51,10 +51,7 @@ function GreyRP:SetupMapPanel(sx, sy, sz, Id)
 			self.LastUpdate = RealTime()
 		end
 		local x, y = self:LocalToScreen()
-		local w, h = self:GetSize()
 		local OldW, OldH = ScrW(), ScrH()
-		render.PushFilterMag(TEXFILTER.ANISOTROPIC)
-		render.PushFilterMin(TEXFILTER.ANISOTROPIC)
 		render.SetViewPort(x, y, w, h)
 			render.Clear(0, 0, 0, 0)
 			cam.Start2D()
@@ -68,22 +65,25 @@ function GreyRP:SetupMapPanel(sx, sy, sz, Id)
 					w = w,
 					h = h,
 					ortho = true,
-					ortholeft = -OrthoAmount,
-					orthoright = OrthoAmount,
-					orthotop = -OrthoAmount,
-					orthobottom = OrthoAmount,
+					ortholeft = -OrthoAmount / 1000 * w,
+					orthoright = OrthoAmount / 1000 * w,
+					orthotop = -OrthoAmount / 1000 * h,
+					orthobottom = OrthoAmount / 1000 * h,
 					drawhud = false,
 					drawviewmodel = false
 				})
 				RenderingMap = false
+
 			cam.End2D()
 		render.SetViewPort(0, 0, OldW, OldH)
-		render.PopFilterMag()
-		render.PopFilterMin()
-	end
 
-	function self:Paint(w, h)
-		self:Render()
+		surface.SetDrawColor(255, 255, 255, 255)
+		--surface.DrawRect(w / 2 - 3, h / 2 - 3, 6, 6)
+		for _, v in pairs(GreyRP.MapWaypoints) do
+			local Size = 100 * 1 / (self.Zoom / 1000)
+			local tx, ty = (self.TransX - v[2].y) / self.Zoom * 500, (self.TransY - v[2].x) / self.Zoom * 500
+			surface.DrawRect(w / 2 - Size / 2 + tx, h / 2 - Size / 2 + ty, Size, Size)
+		end
 		draw.DrawText("TransX: " .. self.TransX .. " TransY: " .. self.TransY .. " Zoom: " .. self.Zoom, "DermaDefault", 50, 50, Color(255, 255, 255, 255), TEXT_ALIGN_LEFT)
 	end
 
@@ -131,7 +131,7 @@ function GreyRP:SetupMapPanel(sx, sy, sz, Id)
 	end
 end
 
-hook.Add("PreDrawSkyBox", "GTA MapRender", function()
+hook.Add("PreDrawSkyBox", "MapRender", function()
 	if RenderingMap then
 		return true
 	end
@@ -155,6 +155,7 @@ local function OpenMenu()
 	Menu:SetTitle("Map")
 	Menu:ShowCloseButton(true)
 	Menu:SetDraggable(true)
+	Menu:SetSizable(true)
 	Menu:MakePopup()
 	Menu.lblTitle:SetFont("DYNNPC_FONT_LARGE")
 	function Menu:Paint(w, h)

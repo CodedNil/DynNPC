@@ -12,16 +12,10 @@ net.Receive("PropertiesDevNet", function(Len, Plr)
 	end
 end)
 
-net.Start("PropertiesDevNet")
-	net.WriteString("GetData")
-net.SendToServer()
-
 timer.Simple(1, function()
-	if #table.GetKeys(LocalPropertyList) == 0 then
-		net.Start("PropertiesDevNet")
-			net.WriteString("GetData")
-		net.SendToServer()
-	end
+	net.Start("PropertiesDevNet")
+		net.WriteString("GetData")
+	net.SendToServer()
 end)
 
 local RenderCameras = {}
@@ -35,10 +29,12 @@ hook.Add("GetMapWaypoints", "PropertiesMapWaypoints", function()
 	for i, v in pairs(LocalPropertyList) do
 		local AvgPos
 		for _, x in pairs(v.Doors) do
-			AvgPos = not AvgPos and x or (AvgPos + x) / 2
+			if IsValid(x) then
+				AvgPos = not AvgPos and x:GetPos() or (AvgPos + x:GetPos()) / 2
+			end
 		end
 		if AvgPos then
-			GreyRP.MapWaypoints[#GreyRP.MapWaypoints + 1] = AvgPos
+			GreyRP.MapWaypoints[#GreyRP.MapWaypoints + 1] = {i, AvgPos}
 		end
 	end
 end)
