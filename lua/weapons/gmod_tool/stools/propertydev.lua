@@ -360,20 +360,33 @@ if CLIENT then
         elseif self.EditMode == "Add" then
             if Trace.Hit and not Trace.HitSky then
                 Planes[#Planes + 1] = {Trace.HitPos, Trace.HitNormal}
-                if #Planes == 6 then
-                    local SX, SY, SZ = GetPlanesIntersection({Planes[1], Planes[2], Planes[3]})
-                    local EX, EY, EZ = GetPlanesIntersection({Planes[4], Planes[5], Planes[6]})
-                    if EX and SX then
-                        local Start, End = Vector(SX, SY, SZ), Vector(EX, EY, EZ)
-                        OrderVectors(Start, End)
-                        local Property = Properties.Add(table.Copy(PropertyDataFormat))
-                        Properties.UpdateVariable(Property, "Position", {Start, End})
-                        self.SelectedProperty = Property
-                    end
+                if #Planes ~= 6 then
+                    return true
+                end
+                local SX, SY, SZ = GetPlanesIntersection({Planes[1], Planes[2], Planes[3]})
+                local EX, EY, EZ = GetPlanesIntersection({Planes[4], Planes[5], Planes[6]})
+                if not EX and SX then
                     Planes = {}
                     self.EditMode = "Select"
-                    return EX and SX
+                    return false
                 end
+                local Start, End = Vector(SX, SY, SZ), Vector(EX, EY, EZ)
+                OrderVectors(Start, End)
+                for _, v in pairs(Properties.GetAll()) do
+                    local NewStart, NewEnd = Vector(v.Start), Vector(v.End)
+                    OrderVectors(NewStart, NewEnd)
+                    print(NewStart:Distance(Start), NewEnd:Distance(End))
+                    if NewStart:Distance(Start) < 5 and NewEnd:Distance(End) < 5 then
+                        Planes = {}
+                        self.EditMode = "Select"
+                        return false
+                    end
+                end
+                local Property = Properties.Add(table.Copy(PropertyDataFormat))
+                Properties.UpdateVariable(Property, "Position", {Start, End})
+                self.SelectedProperty = Property
+                Planes = {}
+                self.EditMode = "Select"
                 return true
             end
         elseif self.EditMode == "Door" then
