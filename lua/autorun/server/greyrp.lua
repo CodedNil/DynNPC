@@ -19,16 +19,34 @@ function GreyRP.ConvertFromOld(Name)
 end
 
 function GreyRP.GetData(Name)
-	GreyRP.ConvertFromOld(Name)
+	--GreyRP.ConvertFromOld(Name)
 	if file.Exists("greyrp/" .. game.GetMap():lower() .. "/" .. Name .. ".txt", "DATA") then
 		local Text = file.Read("greyrp/" .. game.GetMap():lower() .. "/" .. Name .. ".txt", "DATA")
-		return von.deserialize(Text)
+		local Tbl = von.deserialize(Text)
+		if Name == "property" then
+			for i, v in pairs(Tbl) do
+				local NewDoors = {}
+				for _, x in pairs(v.Doors) do
+					NewDoors[#NewDoors + 1] = DarkRP.doorIndexToEnt(x)
+				end
+				v.Doors = NewDoors
+			end
+		end
+		return Tbl
 	end
 	return {}
 end
 
 function GreyRP.SetData(Name, Data)
-	local SData = von.serialize(Data)
+	local Tbl = table.Copy(Data)
+	for _, v in pairs(Tbl) do
+		local NewDoors = {}
+		for _, x in pairs(v.Doors) do
+			NewDoors[#NewDoors + 1] = x:doorIndex()
+		end
+		v.Doors = NewDoors
+	end
+	local SData = von.serialize(Tbl)
 	file.Write("greyrp/" .. game.GetMap():lower() .. "/" .. Name .. ".txt", SData, "DATA")
 	file.Write("greyrp/" .. game.GetMap():lower() .. "/backups/" .. Name .. os.date(",%d,%m,%Y,%H", os.time()) .. ".txt", SData, "DATA")
 end

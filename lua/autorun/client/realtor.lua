@@ -1,23 +1,3 @@
-local Scale = 1.5
-
-LocalPropertyName = LocalPropertyName or "Default"
-local LocalPropertyList = {}
-
-net.Receive("PropertiesDevNet", function(Len, Plr)
-	local Type = net.ReadString()
-	if Type == "" then
-		LocalPropertyList = net.ReadTable()
-	else
-		LocalPropertyList[Type] = net.ReadTable()
-	end
-end)
-
-timer.Simple(1, function()
-	net.Start("PropertiesDevNet")
-		net.WriteString("GetData")
-	net.SendToServer()
-end)
-
 local RenderCameras = {}
 hook.Add("SetupPlayerVisibility", "PropertiesRenderCameras", function()
 	for _, v in pairs(RenderCameras) do
@@ -26,7 +6,7 @@ hook.Add("SetupPlayerVisibility", "PropertiesRenderCameras", function()
 end)
 
 hook.Add("GetMapWaypoints", "PropertiesMapWaypoints", function()
-	for i, v in pairs(LocalPropertyList) do
+	for i, v in pairs(Properties.GetAll()) do
 		local AvgPos
 		for _, x in pairs(v.Doors) do
 			if IsValid(x) then
@@ -39,25 +19,213 @@ hook.Add("GetMapWaypoints", "PropertiesMapWaypoints", function()
 	end
 end)
 
+PropertyRTMaterials = PropertyRTMaterials or {}
 PropertyRTTextures = PropertyRTTextures or {}
-local function GetRTTexture(Key)
+local LastRenders = {}
+local inhook = false
+local function GetRTTexture(Key, Origin, Angles, w, h)
 	if not PropertyRTTextures[Key] then
-		CreateMaterial("proprt_" .. Key, "UnlitGeneric", {
-			["$model"] = 1,
-			["$surfaceprop"] = "glass",
+		PropertyRTTextures[Key] = GetRenderTargetEx("propertyrt_" .. Key, 2048, 2048,
+		RT_SIZE_DEFAULT, MATERIAL_RT_DEPTH_SEPARATE, bit.bor(0x0004, 0x0008), CREATERENDERTARGETFLAGS_UNFILTERABLE_OK, IMAGE_FORMAT_RGBA8888)
+		PropertyRTMaterials[Key] = CreateMaterial("propertyrt_" .. Key, "UnlitGeneric", {
+			["$ignorez"] = 1,
+			["$vertexcolor"] = 1,
+			["$nolod"] = 0,
+			["$basetexture"] = PropertyRTTextures[Key]:GetName()
 		})
-		PropertyRTTextures[Key] = GetRenderTarget("proprt_" .. Key, 1280, 720, false)
+	end
+	if RealTime() - (LastRenders[Key] or 0) > 60 and not inhook then
+		local OldRT = render.GetRenderTarget()
+		render.SetRenderTarget(PropertyRTTextures[Key])
+			inhook = true
+				render.RenderView({
+					origin = Origin,
+					angles = Angles,
+					x = 0,
+					y = 0,
+					w = ScrW(),
+					h = ScrH(),
+					aspectratio = 2
+				})
+			inhook = false
+		render.SetRenderTarget(OldRT)
+		LastRenders[Key] = RealTime()
 	end
 	return PropertyRTTextures[Key]
 end
 
-local CurMenuProperty
+local function ValidRealtorProperty(Props, PropertyIndex)
+	if not Props[PropertyIndex] then
+		return false
+	end
+	if not Props[PropertyIndex].Cameras[1] then
+		return false
+	end
+	if Props[PropertyIndex].Container then
+		return false
+	end
+	if Props[PropertyIndex].Price == 0 and Props[PropertyIndex].Rent == 0 then
+		return false
+	end
+	return true
+end
+
+local PropertyDescriptionCache = {}
+local function GetPropertyDescription(PropertyIndex, w)
+	local Cache = PropertyDescriptionCache[PropertyIndex]
+	local CheckSum = GlobalPropertiesCheckSum[PropretyIndex]
+	if Cache and Cache[2] == CheckSum then
+		return Cache[1]
+	end
+	local Text = "This property is amazing hi this is awesome text. Forever and ever and ever and ever and ever until the end of time itself! It's ok to be jelly mcmartion it's a beautiful system worth being jelly about."
+	local TextSplit = string.Explode(" ", Text)
+	local TextSegments = {{}}
+	local CurLen = 0
+	surface.SetFont("RealtorPosterFontSmall")
+	local SpaceSize = surface.GetTextSize(" ")
+	for _, g in pairs(TextSplit) do
+		local Size = surface.GetTextSize(g) + SpaceSize
+		if CurLen + Size <= w then
+			CurLen = CurLen + Size
+		else
+			CurLen = Size
+			TextSegments[#TextSegments + 1] = {}
+		end
+		table.insert(TextSegments[#TextSegments], g)
+	end
+	PropertyDescriptionCache[PropertyIndex] = {TextSegments, CheckSum}
+	return TextSegments
+end
+
+surface.CreateFont("RealtorPosterFont", {
+	font = "Trebuchet",
+	size = 28,
+	weight = 500,
+	antialias = true
+})
+surface.CreateFont("RealtorPosterFontSmall", {
+	font = "Trebuchet",
+	size = 16,
+	weight = 1000,
+	antialias = true
+})
+
+local function DrawPropertySheet(PropertyIndex, Prop, Pos, Ang, TextRender)
+	local Origin, Angles = Prop.Cameras[1][1], Prop.Cameras[1][2]
+	local Scale = 0.05 * 0.9
+	local RTKey = tostring(PropertyIndex)
+	if TextRender then
+		GetRTTexture(RTKey, Origin, Angles)
+	end
+	cam.Start3D2D(Pos, Ang, Scale * 0.8)
+		local x, y, w, h = -17.5 / Scale / 2, -25 / Scale / 2, 17.5 / Scale, 25 / Scale
+		surface.SetDrawColor(140, 140, 140, 255)
+		surface.DrawRect(x, y, w, h)
+
+		local m = w * 0.06
+		local m2 = w * 0.02
+		local t = 24
+		local cy = y
+		x = x + m
+		w = w - m * 2
+
+		cy = cy + m
+		surface.SetDrawColor(50, 100, 50, 255)
+		surface.DrawRect(x, cy, w, h * 0.08)
+		if TextRender then
+			surface.SetFont("RealtorPosterFont")
+			surface.SetTextColor(255, 255, 255, 255)
+			EfficientText(Prop.Name, x + w / 2, cy + h * 0.04, true)
+		end
+
+		cy = cy + h * 0.08 + m2
+		surface.SetDrawColor(140, 140, 140, 255)
+		surface.SetMaterial(PropertyRTMaterials[RTKey])
+		surface.DrawTexturedRect(x, cy, w, h * 0.4)
+
+		cy = cy + h * 0.4 + m2
+		surface.SetDrawColor(50, 100, 50, 255)
+		surface.DrawRect(x, cy, w, h * 0.08)
+		if TextRender then
+			local IsContainer = false
+			for _, g in pairs(Properties.GetAll()) do
+				if g.Container == PropertyIndex then
+					IsContainer = true
+					break
+				end
+			end
+			EfficientText(IsContainer and "Apartments" or (Prop.Price > 0 or Prop.Rent > 0) and (Prop.Business and "Business" or "House"), x + w / 2, cy + h * 0.04, true)
+		end
+
+		cy = cy + h * 0.08 + m2
+		if TextRender then
+			surface.SetFont("RealtorPosterFontSmall")
+			surface.SetTextColor(0, 0, 0, 255)
+			for _, g in pairs(GetPropertyDescription(PropertyIndex, w)) do
+				EfficientText(table.concat(g, " "), x, cy)
+				cy = cy + t
+			end
+		end
+
+		cy = y + h * 0.92 - m
+		surface.SetDrawColor(50, 100, 50, 255)
+		surface.DrawRect(x, cy, w, h * 0.08)
+		if TextRender then
+			surface.SetFont("RealtorPosterFont")
+			surface.SetTextColor(255, 255, 255, 255)
+			EfficientText((Prop.Price > 0 and "Price: " .. DarkRP.formatMoney(Prop.Price) .. (Prop.Rent > 0 and "  " or "") or "") .. (Prop.Rent > 0 and "Rent: " .. DarkRP.formatMoney(Prop.Rent) or ""), x + w / 2, cy + h * 0.04, true)
+		end
+	cam.End3D2D()
+end
+
+hook.Add("PostDrawTranslucentRenderables", "RealtorDrawWorld", function()
+	local Property = Properties.GetByName("Realtor")
+	if not Property then
+		return
+	end
+	local Props = Properties.GetAll()
+	render.SetColorMaterial()
+	local TravelDistance = 0
+	local PropertyIndex = 1
+	for _, v in pairs(Property.Nodes or {}) do
+		local Render = v[1]:ToScreen().visible and EyePos():Distance(v[1]) < 2000
+		local TextRender = EyePos():Distance(v[1]) < 500
+		for a = 1, 5 do
+			for b = 1, 4 do
+				if not ValidRealtorProperty(Props, PropertyIndex) then
+					TravelDistance = 0
+					repeat
+						TravelDistance = TravelDistance + 1
+						PropertyIndex = PropertyIndex + 1
+					until ValidRealtorProperty(Props, PropertyIndex) or TravelDistance == 20
+					if not ValidRealtorProperty(Props, PropertyIndex) then
+						continue
+					end
+				end
+				if not Render then
+					PropertyIndex = PropertyIndex + 1
+					return
+				end
+				local Prop = Props[PropertyIndex]
+				local Ang = v[2]:Angle()
+				local Pos = v[1] + Ang:Right() * (a - 3) * 15 + -Ang:Up() * (b - 2.5) * 21
+				Ang:RotateAroundAxis(Ang:Forward(), 90)
+				Ang:RotateAroundAxis(Ang:Right(), 90)
+
+				DrawPropertySheet(PropertyIndex, Prop, Pos, Ang, TextRender)
+				PropertyIndex = PropertyIndex + 1
+			end
+		end
+	end
+end)
+
+--[[local CurMenuProperty
 net.Receive("PropertiesMenuNet", function(Len, Plr)
-	local Tbl = table.ClearKeys(LocalPropertyList, true)
+	local Tbl = table.ClearKeys(Properties.GetAll(), true)
 	table.SortByMember(Tbl, "Price", true)
 	if not CurMenuProperty then
 		for _, v in pairs(Tbl) do
-			if not v.IsBusiness and (string.EndsWith(v.__key, "_0") or not string.find(v.__key, "_", #v.__key - 3)) then
+			if not v.IsBusiness and (string.EndsWith(v.Name, "_0") or not string.find(v.Name, "_", #v.Name - 3)) then
 				CurMenuProperty = v.__key
 				break
 			end
@@ -138,12 +306,12 @@ net.Receive("PropertiesMenuNet", function(Len, Plr)
 	PictureBox:Dock(TOP)
 	local PictureBoxI = 1
 	function PictureBox:Paint(w, h)
-		if #LocalPropertyList[CurMenuProperty].Cameras == 0 then
+		if #GlobalProperties[CurMenuProperty].Cameras == 0 then
 			return
 		end
-		if CurMenuProperty and LocalPropertyList[CurMenuProperty] then -- TODO Check if not owned or self owned
+		if CurMenuProperty and GlobalProperties[CurMenuProperty] then -- TODO Check if not owned or self owned
 			local x, y = self:LocalToScreen()
-			h = (#LocalPropertyList[CurMenuProperty].Cameras <= 1) and h * 1.429 - 70 or h - 15
+			h = (#GlobalProperties[CurMenuProperty].Cameras <= 1) and h * 1.429 - 70 or h - 15
 			render.DrawTextureToScreenRect(GetRTTexture(CurMenuProperty .. PictureBoxI), x, y, w, h)
 		end
 	end
@@ -172,11 +340,11 @@ net.Receive("PropertiesMenuNet", function(Len, Plr)
 			v:Remove()
 		end
 		self.Panels = {}
-		if not CurMenuProperty or not LocalPropertyList[CurMenuProperty] then
+		if not CurMenuProperty or not GlobalProperties[CurMenuProperty] then
 			return
 		end
 		RenderCameras = {}
-		for i, v in pairs(LocalPropertyList[CurMenuProperty].Cameras) do
+		for i, v in pairs(GlobalProperties[CurMenuProperty].Cameras) do
 			RenderCameras[#RenderCameras + 1] = v[1]
 			local New = vgui.Create("DButton")
 			New.LastRender = 0
@@ -212,7 +380,7 @@ net.Receive("PropertiesMenuNet", function(Len, Plr)
 				 	New.LastRender = RealTime()
 				end
 
-				if #LocalPropertyList[CurMenuProperty].Cameras > 1 then
+				if #GlobalProperties[CurMenuProperty].Cameras > 1 then
 					local px, py = PictureScroll:LocalToScreen()
 					local pw, ph = PictureScroll:GetSize()
 					x, y = self:GetPos()
@@ -264,24 +432,24 @@ net.Receive("PropertiesMenuNet", function(Len, Plr)
 	end
 
 	for _, v in pairs(Tbl) do
-		local Start = string.find(v.__key, "_", #v.__key - 3)
-		if not string.EndsWith(v.__key, "_0") and Start then
+		local Start = string.find(v.Name, "_", #v.Name - 3)
+		if not string.EndsWith(v.Name, "_0") and Start then
 			continue
 		end
 		local New = vgui.Create("DButton", v.IsBusiness and BusinessesScroll or HousesScroll)
 		New:Dock(TOP)
-		New:DockMargin(0, 6 * Scale, 0, 0)
-		New:SetTall(30 * Scale)
+		New:DockMargin(0, 9, 0, 0)
+		New:SetTall(45)
 		New:SetFont("DYNNPC_FONT_MEDIUM")
 		New:SetTextColor(Color(255, 255, 255, 255))
-		local NewTitle = (Start and v.__key:sub(1, Start - 1) or v.__key):gsub(" ", "")
+		local NewTitle = (Start and v.Name:sub(1, Start - 1) or v.Name):gsub(" ", "")
 		NewTitle = NewTitle:gsub("[A-Z]", " %1"):Trim()
 		surface.SetFont("DYNNPC_FONT_MEDIUM")
 		local sws = surface.GetTextSize(" ")
 		New:SetText(NewTitle .. ":" .. string.rep(" ", (50 * sws - surface.GetTextSize(NewTitle)) / sws) .. "Price: $" .. v.Price)
 		function New:Paint(w, h)
-			self:SetTextColor(CurMenuProperty == v.__key and Color(80, 80, 80, 255) or Color(255, 255, 255, 255))
-			surface.SetDrawColor(CurMenuProperty == v.__key and Color(155, 242, 236, 255) or Color(74, 211, 202, 255))
+			self:SetTextColor(CurMenuProperty == v.Name and Color(80, 80, 80, 255) or Color(255, 255, 255, 255))
+			surface.SetDrawColor(CurMenuProperty == v.Name and Color(155, 242, 236, 255) or Color(74, 211, 202, 255))
 			surface.DrawRect(0, 0, w, h)
 		end
 		function New:DoClick()
@@ -290,253 +458,4 @@ net.Receive("PropertiesMenuNet", function(Len, Plr)
 			PictureBoxI = 1
 		end
 	end
-end)
-
-local function VerifyLocalPropertyList()
-	LocalPropertyList[LocalPropertyName] = LocalPropertyList[LocalPropertyName] or {Price = 100, IsBusiness = false, Doors = {}, Cameras = {}}
-end
-
-local Menu
-local function OpenMenu()
-	if Menu and IsValid(Menu) then
-		Menu:Remove()
-	end
-	local Tbl = {"Name", "Price", "IsBusiness", "AddDoor", "ClearDoors", "AddCamera", "ClearCameras", "Remove"}
-
-	Menu = vgui.Create("DFrame")
-	Menu:SetSize(200 * Scale, 100)
-	Menu:SetTitle("PropertyDev")
-	Menu:ShowCloseButton(true)
-	Menu:SetDraggable(true)
-	Menu:MakePopup()
-	Menu.lblTitle:SetFont("DYNNPC_FONT_LARGE")
-	function Menu:Paint(w, h)
-		draw.RoundedBoxEx(8, 0, 0, w, 24, Color(32, 178, 170, 255), false, true, false, false)
-		draw.RoundedBoxEx(8, 0, 24, w, h - 24, Color(245, 245, 245, 255), false, false, true, false)
-	end
-
-	local Buttons = {}
-
-	for i, v in pairs(Tbl) do
-		local New = vgui.Create((v == "Name" or v == "Price") and "DTextEntry" or v == "IsBusiness" and "DCheckBoxLabel" or "DButton", Menu)
-		New:Dock(TOP)
-		New:DockMargin(6 * Scale, 6 * Scale, 6 * Scale, i == #Tbl and 6 * Scale or 0)
-		New:SetTall(30 * Scale)
-		New:SetFont("DYNNPC_FONT_MEDIUM")
-		New:SetTextColor(Color(80, 80, 80, 255))
-		New:SetText(v == "Name" and LocalPropertyName or v)
-		function New:ResetValue()
-			if v == "Price" then
-				self:SetText(LocalPropertyList[LocalPropertyName] and LocalPropertyList[LocalPropertyName].Price or 100)
-			elseif v == "IsBusiness" then
-				self:SetValue(LocalPropertyList[LocalPropertyName] and LocalPropertyList[LocalPropertyName].IsBusiness or false)
-			end
-		end
-		New:ResetValue()
-		Buttons[#Buttons + 1] = New
-
-		if v == "Name" or v == "Price"  then
-			function New:OnEnter()
-				if v == "Name" then
-					if self:GetText() ~= "" then
-						LocalPropertyName = self:GetText()
-					else
-						self:SetText(LocalPropertyName)
-					end
-					for _, x in pairs(Buttons) do
-						x:ResetValue()
-					end
-				else
-					local CaretPos = self:GetCaretPos()
-					self:SetText(Format("%i", math.min(math.max(tonumber(self:GetText()) or 0, 1), 1000000)))
-					self:SetCaretPos(CaretPos)
-					VerifyLocalPropertyList()
-					LocalPropertyList[LocalPropertyName].Price = tonumber(self:GetText())
-					net.Start("PropertiesDevNet")
-						net.WriteString("Price")
-						net.WriteString(LocalPropertyName)
-						net.WriteDouble(tonumber(self:GetText()))
-					net.SendToServer()
-				end
-			end
-		elseif v == "IsBusiness" then
-			function New:OnChange(Value)
-				VerifyLocalPropertyList()
-				LocalPropertyList[LocalPropertyName].IsBusiness = Value
-				net.Start("PropertiesDevNet")
-					net.WriteString(v)
-					net.WriteString(LocalPropertyName)
-					net.WriteBool(Value)
-				net.SendToServer()
-			end
-		else
-			function New:DoClick()
-				if v == "ClearDoors" or v == "ClearCameras" or v == "Remove" then
-					VerifyLocalPropertyList()
-					if v == "ClearDoors" then
-						LocalPropertyList[LocalPropertyName].Doors = {}
-					elseif v == "ClearCameras" then
-						LocalPropertyList[LocalPropertyName].Cameras = {}
-					elseif v == "Remove" then
-						LocalPropertyList[LocalPropertyName] = nil
-					end
-					net.Start("PropertiesDevNet")
-						net.WriteString(v)
-						net.WriteString(LocalPropertyName)
-					net.SendToServer()
-				elseif v == "AddDoor" then
-					local Ent = LocalPlayer():GetEyeTrace().Entity
-					if IsValid(Ent) and Ent:isDoor() and not table.HasValue(LocalPropertyList[LocalPropertyName].Doors, Ent) then
-						VerifyLocalPropertyList()
-						table.insert(LocalPropertyList[LocalPropertyName].Doors, Ent)
-						net.Start("PropertiesDevNet")
-							net.WriteString(v)
-							net.WriteString(LocalPropertyName)
-							net.WriteEntity(Ent)
-						net.SendToServer()
-					end
-				elseif v == "AddCamera" then
-					VerifyLocalPropertyList()
-					table.insert(LocalPropertyList[LocalPropertyName].Cameras, {LocalPlayer():EyePos(), LocalPlayer():EyeAngles()})
-					net.Start("PropertiesDevNet")
-						net.WriteString(v)
-						net.WriteString(LocalPropertyName)
-						net.WriteVector(LocalPlayer():EyePos())
-						net.WriteAngle(LocalPlayer():EyeAngles())
-					net.SendToServer()
-				end
-			end
-		end
-	end
-	Menu:InvalidateLayout(true)
-	Menu:SizeToChildren(false, true)
-	Menu:SetTall(Menu:GetTall() + 10)
-	Menu:CenterVertical()
-	Menu:CenterHorizontal(0.9)
-end
-
-concommand.Add("propertydevmode", function()
-	OpenMenu()
-end)
-
-hook.Add("HUDPaint", "PropertyInfoHud", function()
-	if IsValid(Menu) then
-		local Houses = {}
-		local Businesses = {}
-		for i, v in pairs(LocalPropertyList) do
-			if v.IsBusiness then
-				Businesses[#Businesses + 1] = i
-			else
-				Houses[#Houses + 1] = i
-			end
-		end
-		table.SortByMember(Houses, 1, true)
-		table.SortByMember(Businesses, 1, true)
-
-		local MaxX = 0
-		surface.SetFont("DermaDefault")
-		local n = 0
-		for _, v in pairs(Houses) do
-			n = n + 1
-			MaxX = math.max(surface.GetTextSize(v), MaxX)
-		end
-		draw.RoundedBox(0, ScrW() - 30 - MaxX, 25, MaxX + 20, n * 20 + 5, Color(0, 0, 0, 255))
-		n = 0
-		for _, v in pairs(Houses) do
-			n = n + 1
-			draw.DrawText(v, "DermaDefault", ScrW() - 20, 10 + n * 20, Color(255, 255, 255, 255), TEXT_ALIGN_RIGHT)
-		end
-
-		MaxX = 0
-		surface.SetFont("DermaDefault")
-		n = 0
-		for _, v in pairs(Businesses) do
-			n = n + 1
-			MaxX = math.max(surface.GetTextSize(v), MaxX)
-		end
-		draw.RoundedBox(0, ScrW() - 230 - MaxX, 25, MaxX + 20, n * 20 + 5, Color(0, 0, 0, 255))
-		n = 0
-		for _, v in pairs(Businesses) do
-			n = n + 1
-			draw.DrawText(v, "DermaDefault", ScrW() - 220, 10 + n * 20, Color(255, 255, 255, 255), TEXT_ALIGN_RIGHT)
-		end
-	end
-end)
-
-local CameraModels = {}
-local CameraKey = 1
-
-local function GetCameraModel(i)
-	if not CameraModels[i] then
-		CameraModels[i] = ClientsideModel("models/dav0r/camera.mdl", RENDERGROUP_OPAQUE)
-		CameraModels[i]:SetModelScale(2)
-	end
-	return CameraModels[i]
-end
-
-local BlankCam = {}
-function BlankCam:IsValid()
-	return true
-end
-function BlankCam:DrawModel()
-	render.Model({model = "models/dav0r/camera.mdl", pos = self.Pos, angle = self.Ang}, GetCameraModel(CameraKey))
-	CameraKey = CameraKey + 1
-end
-
-local BlankCamList = {}
-
-hook.Add("HUDPaint", "PropertyInfo3dHud", function()
-	if IsValid(Menu) then
-		local Doors, Cameras = {}, {}
-		if LocalPropertyList[LocalPropertyName] then
-			for _, v in pairs(LocalPropertyList[LocalPropertyName].Doors) do
-				if IsValid(v) then
-					Doors[#Doors + 1] = v
-				end
-			end
-			for i, v in pairs(LocalPropertyList[LocalPropertyName].Cameras) do
-				local Key = LocalPropertyName .. i
-				if not BlankCamList[Key] then
-					BlankCamList[Key] = table.Copy(BlankCam)
-				end
-				BlankCamList[Key].Pos = v[1]
-				BlankCamList[Key].Ang = v[2]
-				Cameras[#Cameras + 1] = BlankCamList[Key]
-			end
-		end
-		if #Doors > 0 or #Cameras > 0 then
-			CameraKey = 1
-			halo.Add(Doors, Color(255, 255, 255, 255), 5, 5, 3, true, true)
-			halo.Add(Cameras, Color(255, 255, 255, 255), 5, 5, 3, true, true)
-			local MinS, MaxS = Vector(math.huge, math.huge, math.huge), Vector(-math.huge, -math.huge, -math.huge)
-			cam.Start3D()
-				for _, v in pairs(Doors) do
-					v:DrawModel()
-
-					local Pos = v:GetPos()
-					MinS.x = math.min(Pos.x, MinS.x)
-					MinS.y = math.min(Pos.y, MinS.y)
-					MinS.z = math.min(Pos.z, MinS.z)
-
-					MaxS.x = math.max(Pos.x, MaxS.x)
-					MaxS.y = math.max(Pos.y, MaxS.y)
-					MaxS.z = math.max(Pos.z, MaxS.z)
-				end
-				for i, v in pairs(Cameras) do
-					v:DrawModel()
-
-					local Pos = v.Pos
-					MinS.x = math.min(Pos.x, MinS.x)
-					MinS.y = math.min(Pos.y, MinS.y)
-					MinS.z = math.min(Pos.z, MinS.z)
-
-					MaxS.x = math.max(Pos.x, MaxS.x)
-					MaxS.y = math.max(Pos.y, MaxS.y)
-					MaxS.z = math.max(Pos.z, MaxS.z)
-				end
-				local Center = (MaxS + MinS) / 2
-				render.DrawWireframeBox(Center, Angle(0, 0, 0), MaxS - Center + Vector(100, 100, 100), MinS - Center - Vector(100, 100, 100), Color(255, 255, 255, 255), false)
-			cam.End3D()
-		end
-	end
-end)
+end)]]

@@ -19,7 +19,8 @@ local PropertyDataFormat = {
     End = Vector(),
 
     Doors = {},
-    Cameras = {}
+    Cameras = {},
+    Nodes = {}
 }
 
 local PropertyDataFormatView = {
@@ -37,7 +38,11 @@ local PropertyDataFormatView = {
 
 if SERVER then
     util.AddNetworkString("PropertiesDev")
-    GlobalProperties = GlobalProperties or {}
+    GlobalProperties = GreyRP.GetData("property")
+    local function UpdateData()
+    	GreyRP.SetData("property", GlobalProperties)
+    end
+
     for i, v in pairs(PropertyDataFormat) do
         for x, y in pairs(GlobalProperties) do
             if y[i] == nil or type(y[i]) ~= type(v) then
@@ -115,6 +120,7 @@ if SERVER then
                 end
             end
         end
+        UpdateData()
     end)
 end
 if CLIENT then
@@ -128,6 +134,16 @@ if CLIENT then
                 return v
             end
         end
+    end
+
+    function EfficientText(Text, x, y, Center)
+    	if Center then
+    		local w, h = surface.GetTextSize(Text)
+    		x = x - w / 2
+    		y = y - h / 2
+    	end
+    	surface.SetTextPos(math.ceil(x), math.ceil(y))
+    	surface.DrawText(Text)
     end
 
     local function MirrorPosition(Position, MirrorPos, MirrorOffset)
@@ -156,11 +172,7 @@ if CLIENT then
                 z = v[1].z
             end
         end
-        if not x or not y or not z then
-            return
-        else
-            return x, y, z
-        end
+        return x, y, z
     end
 
     local Normals = {
@@ -192,6 +204,11 @@ if CLIENT then
         end
     end
 
+    local function Notify(Text, IsError)
+        notification.AddLegacy(Text, IsError and NOTIFY_ERROR or NOTIFY_HINT, IsError and 4 or 2)
+        surface.PlaySound("buttons/button15.wav")
+    end
+
     hook.Add("CanTool", "FPP_CL_CanTool", function(ply, trace, tool)
         local PropertyToolGun = LocalPlayer().GetActiveWeapon and LocalPlayer():GetActiveWeapon().PrintName == "Tool Gun" and LocalPlayer():GetActiveWeapon():GetMode() == "propertydev"
         if not PropertyToolGun and IsValid(trace.Entity) and not FPP.canTouchEnt(trace.Entity, "Toolgun") then
@@ -200,17 +217,23 @@ if CLIENT then
     end)
 
     GlobalProperties = {}
+    GlobalPropertiesCheckSum = {}
 
     local Plr = LocalPlayer()
 
     net.Receive("PropertiesDev", function()
     	local Property = net.ReadInt(10)
-        if Property > 800 then
+        if Property == 0 then
+            GlobalProperties = net.ReadTable()
+            for i, _ in pairs(GlobalProperties) do
+                GlobalPropertiesCheckSum[i] = 0
+            end
+        elseif Property > 800 then
     		GlobalProperties[Property - 800] = net.ReadTable()
-    	elseif Property == 0 then
-    		GlobalProperties = net.ReadTable()
+            GlobalPropertiesCheckSum[Property - 800] = 0
     	else
     		GlobalProperties[Property][net.ReadString()] = net.ReadType()
+            GlobalPropertiesCheckSum[Property] = GlobalPropertiesCheckSum [Property] + 1
     	end
     end)
 
@@ -218,18 +241,30 @@ if CLIENT then
     	net.Start("PropertiesDev")
     		net.WriteString("Get")
     	net.SendToServer()
+        Plr = LocalPlayer()
     end)
 
-    local Properties = {}
+    Properties = {}
 
     function Properties.GetAll()
         return GlobalProperties
+    end
+    function Properties.Get(Property)
+        return GlobalProperties[Property]
+    end
+    function Properties.GetByName(Name)
+        for _, v in pairs(GlobalProperties) do
+            if v.Name == Name then
+                return v
+            end
+        end
     end
     function Properties.Exists(Property)
         return GlobalProperties[Property] ~= nil
     end
     function Properties.Add(Data)
         local Key = table.insert(GlobalProperties, Data)
+        GlobalPropertiesCheckSum[Key] = 0
         net.Start("PropertiesDev")
             net.WriteString("Set")
             net.WriteInt(Key, 10)
@@ -254,6 +289,7 @@ if CLIENT then
             net.WriteInt(Property, 10)
         net.SendToServer()
         GlobalProperties[Property] = nil
+        GlobalPropertiesCheckSum[Property] = nil
     end
 
     function Properties.CheckContainer(Property)
@@ -302,6 +338,7 @@ if CLIENT then
                 end
             end
         end
+        GlobalPropertiesCheckSum[Property] = GlobalPropertiesCheckSum[Property] + 1
     end
     function Properties.GetVariable(Property, Var, Backup)
         if not GlobalProperties[Property] or GlobalProperties[Property][Var] == nil then
@@ -365,18 +402,25 @@ if CLIENT then
                 end
                 local SX, SY, SZ = GetPlanesIntersection({Planes[1], Planes[2], Planes[3]})
                 local EX, EY, EZ = GetPlanesIntersection({Planes[4], Planes[5], Planes[6]})
-                if not EX and SX then
+                if not SX or not SY or not SZ or not EX or not EY or not EZ then
+                    Notify("Box invalid", true)
                     Planes = {}
                     self.EditMode = "Select"
                     return false
                 end
                 local Start, End = Vector(SX, SY, SZ), Vector(EX, EY, EZ)
                 OrderVectors(Start, End)
+                if Start:Distance(End) < 10 then
+                    Notify("Box too small", true)
+                    Planes = {}
+                    self.EditMode = "Select"
+                    return false
+                end
                 for _, v in pairs(Properties.GetAll()) do
                     local NewStart, NewEnd = Vector(v.Start), Vector(v.End)
                     OrderVectors(NewStart, NewEnd)
-                    print(NewStart:Distance(Start), NewEnd:Distance(End))
-                    if NewStart:Distance(Start) < 5 and NewEnd:Distance(End) < 5 then
+                    if NewStart:Distance(Start) < 10 and NewEnd:Distance(End) < 10 then
+                        Notify("Box already exists", true)
                         Planes = {}
                         self.EditMode = "Select"
                         return false
@@ -385,6 +429,7 @@ if CLIENT then
                 local Property = Properties.Add(table.Copy(PropertyDataFormat))
                 Properties.UpdateVariable(Property, "Position", {Start, End})
                 self.SelectedProperty = Property
+                Notify("Property created", false)
                 Planes = {}
                 self.EditMode = "Select"
                 return true
@@ -399,7 +444,7 @@ if CLIENT then
             Plr:GetActiveWeapon():DoShootEffect(Trace.StartPos, Trace.Normal, nil, 1, IsFirstTimePredicted())
         elseif self.EditMode == "Expand" then
             if Properties.Exists(self.SelectedProperty) then
-                local v = Properties.GetAll()[self.SelectedProperty]
+                local v = Properties.Get(self.SelectedProperty)
                 local Pos = (v.Start + v.End) / 2
                 local MinS = Vector(math.min(Pos.x - v.Start.x, Pos.x - v.End.x), math.min(Pos.y - v.Start.y, Pos.y - v.End.y), math.min(Pos.z - v.Start.z, Pos.z - v.End.z))
                 local MaxS = Vector(math.max(Pos.x - v.Start.x, Pos.x - v.End.x), math.max(Pos.y - v.Start.y, Pos.y - v.End.y), math.max(Pos.z - v.Start.z, Pos.z - v.End.z))
@@ -419,6 +464,17 @@ if CLIENT then
                 Menu:AddOption("Close", function() end)
                 Menu:Open()
                 Menu:SetPos(gui.MousePos())
+            end
+        elseif self.EditMode == "Node" then
+            if Properties.Exists(self.SelectedProperty) then
+                local v = Properties.Get(self.SelectedProperty)
+                local NewStart, NewEnd = Vector(v.Start), Vector(v.End)
+                OrderVectors(NewStart, NewEnd)
+                local InBox = Trace.HitPos:WithinAABox(NewStart, NewEnd)
+                if InBox then
+                    Properties.InsertTableVariable(self.SelectedProperty, "Nodes", {Trace.HitPos, Trace.HitNormal})
+                    return true
+                end
             end
         end
         return false
@@ -471,7 +527,7 @@ if CLIENT then
             end
         elseif self.EditMode == "Expand" then
             if Face and Properties.Exists(self.SelectedProperty) then
-                local v = Properties.GetAll()[self.SelectedProperty]
+                local v = Properties.Get(self.SelectedProperty)
                 local Pos = (v.Start + v.End) / 2
                 local NewStart, NewEnd = Vector(v.Start), Vector(v.End)
                 local MaxS = Vector(math.max(Pos.x - v.Start.x, Pos.x - v.End.x), math.max(Pos.y - v.Start.y, Pos.y - v.End.y), math.max(Pos.z - v.Start.z, Pos.z - v.End.z))
@@ -499,6 +555,24 @@ if CLIENT then
                 end
                 Properties.UpdateVariable(self.SelectedProperty, "Position", {NewStart, NewEnd})
                 return true
+            end
+        elseif self.EditMode == "Node" then
+            local Closest, ClosestDist, ClosestPos, ClosestNormal
+            for _, v in pairs(Properties.GetAll()) do
+                for i, x in pairs(v.Nodes) do
+                    local HitPos, HitNormal = util.IntersectRayWithOBB(Trace.StartPos, Trace.Normal * 10000, x[1], x[2]:Angle(), -Vector(15, 15, 15), Vector(15, 15, 15))
+                    if HitPos and (not Closest or (Trace.StartPos - HitPos):Length() < ClosestDist) then
+                        Closest, ClosestDist, ClosestPos, ClosestNormal = i, (Trace.StartPos - HitPos):Length(), HitPos, HitNormal
+                    end
+                end
+            end
+            if Closest and not util.TraceLine({start = Trace.StartPos, endpos = ClosestPos, filter = Plr}).Hit then
+                for i, _ in pairs(Properties.GetVariable(self.SelectedProperty, "Nodes")) do
+                    if i == Closest then
+                        Properties.UpdateTableVariable(self.SelectedProperty, "Nodes", i, nil)
+                    end
+                end
+                Plr:GetActiveWeapon():DoShootEffect(ClosestPos, ClosestNormal, nil, 1, IsFirstTimePredicted())
             end
         end
         return false
@@ -652,11 +726,11 @@ if CLIENT then
             MirrorOnParent:SetText("Mirror On Parent")
 
             function MirrorOnParent.DoClick()
-                local ContainerProperty = Properties.GetAll()[Container]
+                local ContainerProperty = Properties.Get(Container)
                 if not ContainerProperty then
                     return
                 end
-                local OldProperty = Properties.GetAll()[StartSelection]
+                local OldProperty = Properties.Get(StartSelection)
                 local ContainerPos = (ContainerProperty.Start + ContainerProperty.End) / 2
                 local OldPos = (OldProperty.Start + OldProperty.End) / 2
 
@@ -736,7 +810,7 @@ if CLIENT then
             DuplicateUp:Dock(BOTTOM)
             DuplicateUp:SetText("Duplicate 1 floor up")
             function DuplicateUp.DoClick()
-                local OldProperty = Properties.GetAll()[StartSelection]
+                local OldProperty = Properties.Get(StartSelection)
                 local UpHeight
                 for i, v in pairs(OldProperty.Doors) do
                     local NewPos = v:GetPos() + Vector(0, 0, 140)
@@ -821,6 +895,8 @@ if CLIENT then
                         self.EditMode = "Camera"
                     elseif Args[1]:lower() == "expand" then
                         self.EditMode = "Expand"
+                    elseif Args[1]:lower() == "node" then
+                        self.EditMode = "Node"
                     end
                 end
             end)
@@ -830,6 +906,7 @@ if CLIENT then
     function TOOL:DrawHUD()
         if self.EditMode == "Add" then
             draw.SimpleTextOutlined("Press left mouse to set position " .. (#Planes < 3 and 1 or 2) .. " plane " .. (#Planes % 3 + 1), "DermaLarge", ScrW() / 2, ScrH() * 0.7, Color(90, 200, 90, 255), TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER, 1, Color(0, 0, 0, 255))
+            draw.SimpleTextOutlined("Right click to cancel", "DermaLarge", ScrW() / 2, ScrH() * 0.7 + 50, Color(90, 200, 90, 255), TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER, 1, Color(0, 0, 0, 255))
         end
     end
 
@@ -868,46 +945,115 @@ if CLIENT then
             return
         end
         local Tool = Plr:GetTool("propertydev")
-        for _, v in pairs(Planes) do
-            render.SetColorMaterial()
-            render.DrawQuadEasy(v[1] + v[2], v[2], 30, 30, Color(0, 0, 0, 255), 0)
+        if Tool.EditMode == "Add" then
+        	local tr = util.GetPlayerTrace(Plr)
+        	tr.mask = bit.bor(CONTENTS_SOLID, CONTENTS_MOVEABLE, CONTENTS_MONSTER, CONTENTS_WINDOW, CONTENTS_DEBRIS, CONTENTS_GRATE, CONTENTS_AUX)
+        	local Trace = util.TraceLine(tr)
+            local EPlanes = table.Copy(Planes)
+            EPlanes[#EPlanes + 1] = {Trace.HitPos, Trace.HitNormal}
+            for _, v in pairs(EPlanes) do
+                local Text
+                local Normal = Vector(math.Round(math.abs(v[2].x)), math.Round(math.abs(v[2].y)), math.Round(math.abs(v[2].z)))
+                if Normal == Vector(1, 0, 0) then
+                    Text = "X"
+                elseif Normal == Vector(0, 1, 0) then
+                    Text = "Y"
+                elseif Normal == Vector(0, 0, 1) then
+                    Text = "Z"
+                end
+                if Text then
+                    local Col = Text == "X" and Color(255, 0, 0, 255) or Text == "Y" and Color(0, 255, 0, 255) or Color(0, 0, 255, 255)
+                    render.SetColorMaterial()
+                    render.DrawQuadEasy(v[1] + v[2] * 0.2, v[2], 30, 30, Color(Col.r * 0.8, Col.g * 0.8, Col.b * 0.8, 150), 0)
+                    local Ang = v[2]:Angle()
+                    Ang:RotateAroundAxis(Ang:Forward(), 90)
+                    Ang:RotateAroundAxis(Ang:Right(), -90)
+                    cam.Start3D2D(v[1] + v[2] * 0.2, Ang, 1)
+                        draw.SimpleTextOutlined(Text, "DermaLarge", 0, 0, Col, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER, 1, Color(0, 0, 0, 150))
+                    cam.End3D2D()
+                end
+            end
+            for i = 1, 2 do
+                local NewPlanes = (i == 2 and #EPlanes > 3 and {EPlanes[4], EPlanes[5], EPlanes[6]}) or (i == 1 and {EPlanes[1], EPlanes[2], EPlanes[3]})
+                if not NewPlanes then
+                    continue
+                end
+                local AX, AY, AZ
+                for _, v in pairs(NewPlanes) do
+                    if not AX then
+                        AX, AY, AZ = v[1].x, v[1].y, v[1].z
+                    else
+                        AX, AY, AZ = (AX + v[1].x) / 2, (AY + v[1].y) / 2, (AZ + v[1].z) / 2
+                    end
+                end
+                local LineLength = 1000
+                local X, Y, Z = GetPlanesIntersection(NewPlanes)
+                render.SetColorMaterial()
+                cam.IgnoreZ(true)
+                    if Y and Z then
+                        render.DrawBeam(Vector(AX - LineLength, Y, Z), Vector(AX + LineLength, Y, Z), 2, 0, 0, Color(255, 0, 0, 255))
+                    end
+                    if X and Z then
+                        render.DrawBeam(Vector(X, AY - LineLength, Z), Vector(X, AY + LineLength, Z), 2, 0, 0, Color(0, 255, 0, 255))
+                    end
+                    if X and Y then
+                        render.DrawBeam(Vector(X, Y, AZ - LineLength), Vector(X, Y, AZ + LineLength), 2, 0, 1, Color(0, 0, 255, 255))
+                    end
+                cam.IgnoreZ(false)
+            end
         end
         for i, v in pairs(Properties.GetAll()) do
             local SelfSelected = Tool.SelectedProperty == i
             local Pos = (v.Start + v.End) / 2
+            if LocalPlayer():EyePos():Distance(Pos) > 6000 then
+                continue
+            end
             local MinS = Vector(math.min(Pos.x - v.Start.x, Pos.x - v.End.x), math.min(Pos.y - v.Start.y, Pos.y - v.End.y), math.min(Pos.z - v.Start.z, Pos.z - v.End.z))
             local MaxS = Vector(math.max(Pos.x - v.Start.x, Pos.x - v.End.x), math.max(Pos.y - v.Start.y, Pos.y - v.End.y), math.max(Pos.z - v.Start.z, Pos.z - v.End.z))
             render.SetColorMaterial()
             render.DrawWireframeBox(Pos, Angle(), MinS, MaxS, SelfSelected and Color(0, 150, 0, 150) or Color(255, 0, 0, 150), not SelfSelected)
             render.DrawBox(Pos, Angle(), MinS - Vector(0.5, 0.5, 0.5), MaxS + Vector(0.5, 0.5, 0.5), SelfSelected and Color(0, 150, 0, 100) or Color(255, 0, 0, 40), false)
             render.DrawBox(Pos, Angle(), MaxS - Vector(0.5, 0.5, 0.5), MinS + Vector(0.5, 0.5, 0.5), SelfSelected and Color(0, 150, 0, 60) or Color(255, 0, 0, 20), false)
-            if Face and SelfSelected then
+            if not SelfSelected then
+                continue
+            end
+            if Face then
                 local Normal = GetFaceNormals(Face)
                 local Position = Pos + MaxS * Normal
                 local Size = GetFaceSize(Face, MaxS * 2)
                 render.DrawQuadEasy(Position, Normal, Size[1], Size[2], Color(0, 0, 255, 150), 0)
                 render.DrawQuadEasy(Position, -Normal, Size[1], Size[2], Color(0, 0, 255, 100), 0)
             end
-            if SelfSelected and #v.Doors > 0 then
+            if #v.Nodes > 0 then
+                render.SetColorMaterial()
+                for _, x in pairs(v.Nodes) do
+                    render.DrawQuadEasy(x[1], x[2], 30, 30, Color(255, 255, 255, 255), 0)
+                    render.DrawQuadEasy(x[1], -x[2], 30, 30, Color(80, 80, 80, 255), 0)
+                end
+            end
+            if #v.Doors > 0 then
                 render.MaterialOverride(WhiteMaterial)
                 render.SetBlend(0.3)
                 for _, x in pairs(v.Doors) do
+                    if not IsValid(x) then
+                        continue
+                    end
                     local NewStart, NewEnd = Vector(v.Start), Vector(v.End)
                     OrderVectors(NewStart, NewEnd)
                     local InBox = x:GetPos():WithinAABox(NewStart - Vector(20, 20, 20), NewEnd + Vector(20, 20, 20))
                     render.SetColorModulation(InBox and 0 or 1, 1, 0)
                     cam.Start3D()
                         x:DrawModel()
-                        if not InBox then
-                            render.DrawBeam(Pos + (Pos - x:GetPos()):GetNormal() * -math.min(v.Start:Distance(v.End), v.Start:Distance(x:GetPos())) * 0.3, x:GetPos(), 10, 0, 0, Color(255, 255, 0, 255))
-                        end
                     cam.End3D()
+                    if not InBox then
+                        render.DrawBeam(Pos + (Pos - x:GetPos()):GetNormal() * -math.min(v.Start:Distance(v.End), v.Start:Distance(x:GetPos())) * 0.3, x:GetPos(), 10, 0, 0, Color(255, 255, 0, 255))
+                    end
                 end
                 render.SetColorModulation(1, 1, 1)
                 render.SetBlend(1)
-                render.MaterialOverride(nil)
+                render.MaterialOverride()
             end
-            if SelfSelected and #v.Cameras > 0 then
+            if #v.Cameras > 0 then
                 CameraKey = 1
                 render.SetBlend(0.3)
                 render.MaterialOverride(WhiteMaterial)
@@ -924,30 +1070,48 @@ if CLIENT then
                 end
                 render.SetColorModulation(1, 1, 1)
                 render.SetBlend(1)
-                render.MaterialOverride(nil)
+                render.MaterialOverride()
             end
         end
         cam.IgnoreZ(true)
             for i, v in pairs(Properties.GetAll()) do
                 local SelfSelected = Tool.SelectedProperty == i
                 local Pos = (v.Start + v.End) / 2
+                if LocalPlayer():EyePos():Distance(Pos) > 2000 then
+                    continue
+                end
                 local Ang = (LocalPlayer():EyePos() - Pos):Angle()
                 Ang:RotateAroundAxis(Ang:Forward(), 90)
                 Ang:RotateAroundAxis(Ang:Right(), 90)
                 if (LocalPlayer():EyePos() - Pos):Dot(Ang:Up()) < 0 then
                     Ang:RotateAroundAxis(Ang:Right(), 180)
                 end
+                local IsContainer = false
+                for _, x in pairs(Properties.GetAll()) do
+                    if x.Container == i then
+                        IsContainer = true
+                        break
+                    end
+                end
+                surface.SetFont("DermaLarge")
                 cam.Start3D2D(Pos, Ang, v.Container and 0.4 or 0.7)
-                    surface.SetFont("DermaLarge")
                     local _, Height = surface.GetTextSize("Text")
                     local Text = {
                         v.Name,
-                        v.Container and Properties.GetVariable(v.Container, "Name", "nil") or "$" .. v.Price,
-                        v.Container and "Apartment" or v.Business and "Business" or "House"
+                        v.Container and Properties.GetVariable(v.Container, "Name", "nil") or (v.Price > 0 or v.Rent > 0) and (v.Price > 0 and "Price: " .. DarkRP.formatMoney(v.Price) .. (v.Rent > 0 and "  " or "") or "") .. (v.Rent > 0 and "Rent: " .. DarkRP.formatMoney(v.Rent) or "") or "Unownable",
+                        IsContainer and "Apartment Building" or v.Container and "Apartment" or (v.Price > 0 or v.Rent > 0) and (v.Business and "Business" or "House") or nil
                     }
                     local Col = SelfSelected and Color(0, 255, 0, 255) or Color(255, 0, 0, 255)
+        			surface.SetTextColor(Color(0, 0, 0, 255))
                     for x, y in pairs(Text) do
-                        draw.SimpleTextOutlined(y, "DermaLarge", 0, (x - 1) * Height - ((#Text - 1) * Height) / 2, Col, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER, 1, Color(0, 0, 0, 255))
+        			    EfficientText(y, -1, -1 + (x - 1) * Height - ((#Text - 1) * Height) / 2, true)
+            		    EfficientText(y, 1, 1 + (x - 1) * Height - ((#Text - 1) * Height) / 2, true)
+        			    EfficientText(y, -1, 1 + (x - 1) * Height - ((#Text - 1) * Height) / 2, true)
+            		    EfficientText(y, 1, -1 + (x - 1) * Height - ((#Text - 1) * Height) / 2, true)
+                    end
+        			surface.SetTextColor(Col)
+                    for x, y in pairs(Text) do
+        			    EfficientText(y, 0, (x - 1) * Height - ((#Text - 1) * Height) / 2, true)
                     end
                 cam.End3D2D()
             end
@@ -981,5 +1145,9 @@ function TOOL.BuildCPanel(Panel)
     Panel:AddControl("Button", {
         Label = "Mode: Expand",
         Command = "propertydevsetmode expand"
+    })
+    Panel:AddControl("Button", {
+        Label = "Mode: Node",
+        Command = "propertydevsetmode node"
     })
 end

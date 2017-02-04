@@ -4,13 +4,8 @@ DynNPC:RegisterNPC("Realtor", {
 	CustomNetFunc = "PropertiesMenuNet"
 })
 
-local Data = GreyRP.GetData("properties")
-local function UpdateData()
-	GreyRP.SetData("properties", Data)
-end
-
 hook.Add("SetupPlayerVisibility", "PropertiesRenderCameras", function()
-	for _, v in pairs(Data) do
+	for i, v in pairs(GlobalProperties) do
 		if v.Cameras[1] then
 			AddOriginToPVS(v.Cameras[1][1])
 		end
@@ -32,107 +27,50 @@ util.AddNetworkString("PropertiesMenuNet")
 net.Receive("PropertiesMenuNet", function(Len, Plr)
 	local Type = net.ReadString()
 	local PropertyName = net.ReadString()
-	if not Data[PropertyName] then
+	if not GlobalProperties[PropertyName] then
 		return
 	end
 	if Type == "Buy" then
-		for _, v in pairs(Data[PropertyName].Doors) do
-			OwnDoor(Plr, DarkRP.doorIndexToEnt(v))
+		for _, v in pairs(GlobalProperties[PropertyName].Doors) do
+			OwnDoor(Plr, v)
 		end
 	elseif Type == "Sell" then
-		for _, v in pairs(Data[PropertyName].Doors) do
-			DisownDoor(Plr, DarkRP.doorIndexToEnt(v))
+		for _, v in pairs(GlobalProperties[PropertyName].Doors) do
+			DisownDoor(Plr, v)
 		end
 	end
 end)
 
-local function DoorIDtoPropertyName(DoorID)
-	for i, v in pairs(Data) do
-		if table.HasValue(v.Doors, DoorID) then
-			return i
+local function DoorToPropertyName(Door)
+	for i, v in pairs(GlobalProperties) do
+		for _, x in pairs(v.Doors) do
+			if Door == x then
+				return i
+			end
 		end
 	end
 end
 
 hook.Add("getDoorCost", "PropertiesGetDoorCost", function(Plr, Ent)
-	local DoorID = Ent:doorIndex()
-	if DoorIDtoPropertyName(DoorID) then
+	if DoorToPropertyName(Ent) then
 		return 0
 	end
 end)
 
 hook.Add("playerBuyDoor", "PropertiesBuyDoor", function(Plr, Ent, Custom)
-	local DoorID = Ent:doorIndex()
-	if DoorIDtoPropertyName(DoorID) then
+	if DoorToPropertyName(Ent) then
 		return Custom or false, "You must buy this door from a realtor!"
 	end
 end)
 
 hook.Add("playerSellDoor", "PropertiesSellDoor", function(Plr, Ent, Custom)
-	local DoorID = Ent:doorIndex()
-	if DoorIDtoPropertyName(DoorID) then
+	if DoorToPropertyName(Ent) then
 		return Custom or false, "You must sell this door from a realtor!"
 	end
 end)
 
 hook.Add("hideSellDoorMessage", "PropertiesHideSellMessage", function(Plr, Ent)
-	local DoorID = Ent:doorIndex()
-	if DoorIDtoPropertyName(DoorID) then
+	if DoorIDtoPropertyName(Ent) then
 		return true
 	end
-end)
-
-util.AddNetworkString("PropertiesDevNet")
-net.Receive("PropertiesDevNet", function(Len, Plr)
-	local Type = net.ReadString()
-	if Type == "GetData" then
-		local Tbl = table.Copy(Data)
-		for _, v in pairs(Tbl) do
-			local NewDoors = {}
-			for _, x in pairs(v.Doors) do
-				NewDoors[#NewDoors + 1] = DarkRP.doorIndexToEnt(x)
-			end
-			v.Doors = NewDoors
-		end
-		net.Start("PropertiesDevNet")
-			net.WriteString("")
-			net.WriteTable(Tbl)
-		net.Send(Plr)
-		return
-	end
-	local PropertyName = net.ReadString()
-	Data[PropertyName] = Data[PropertyName] or {Price = 100, IsBusiness = false, Doors = {}, Cameras = {}}
-	if Type == "Price" then
-		Data[PropertyName].Price = net.ReadDouble()
-	elseif Type == "IsBusiness" then
-		Data[PropertyName].IsBusiness = net.ReadBool()
-	elseif Type == "AddDoor" then
-		local Door = net.ReadEntity()
-		if Door:doorIndex() then
-			table.insert(Data[PropertyName].Doors, Door:doorIndex())
-		end
-	elseif Type == "ClearDoors" then
-		Data[PropertyName].Doors = {}
-	elseif Type == "AddCamera" then
-		table.insert(Data[PropertyName].Cameras, {net.ReadVector(), net.ReadAngle()})
-	elseif Type == "ClearCameras" then
-		Data[PropertyName].Cameras = {}
-	elseif Type == "Remove" then
-		Data[PropertyName] = nil
-	end
-	for _, v in pairs(player.GetAll()) do
-		if v ~= Plr then
-			local Tbl = table.Copy(Data[PropertyName])
-			local NewDoors = {}
-			for _, x in pairs(Tbl.Doors) do
-				NewDoors[#NewDoors + 1] = DarkRP.doorIndexToEnt(x)
-			end
-			Tbl.Doors = NewDoors
-			net.Start("PropertiesDevNet")
-				net.WriteString(PropertyName)
-				net.WriteTable(Tbl)
-			net.Send(v)
-		end
-	end
-	UpdateData()
 end)
