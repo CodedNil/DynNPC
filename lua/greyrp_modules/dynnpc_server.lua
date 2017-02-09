@@ -247,114 +247,96 @@ local function RefreshNPC(Key)
 	end
 end
 
-util.AddNetworkString("DynNPCMenu")
-local function Load()
-	for i, v in pairs(Data) do
-		if not DynNPC.NPCs[i] then
-			Data[i] = nil
-			return
-		end
-		if DynNPC.NPCs[i].Dynamic then
-			local Key = table.GetKeys(v)[1]
-			AddNPC(i, v[Key], Key)
-		else
-			for e, PosKey in pairs(v) do
-				AddNPC(i, PosKey, e)
-			end
+for i, v in pairs(Data) do
+	if not DynNPC.NPCs[i] then
+		Data[i] = nil
+		return
+	end
+	if DynNPC.NPCs[i].Dynamic then
+		local Key = table.GetKeys(v)[1]
+		AddNPC(i, v[Key], Key)
+	else
+		for e, PosKey in pairs(v) do
+			AddNPC(i, PosKey, e)
 		end
 	end
-
-	net.Receive("DynNPCMenu", function(Len, Plr)
-		local EntName = net.ReadString()
-		local Ent = net.ReadEntity()
-		local String = net.ReadString()
-		if IsValid(Ent) then
-			if String == "Cancel" then
-				Ent:Speak(1.7, DynNPC.NPCs[EntName].Sounds.Cancel)
-			else
-				Ent:Speak(0.5, DynNPC.NPCs[EntName].Sounds.Ok)
-			end
-		end
-		for _, v in pairs(DynNPC.NPCs[EntName].Options) do
-			if String == v.Name then
-				v.Select(Plr)
-			end
-		end
-	end)
-
-	local function LookupString(String)
-		for i, v in pairs(DynNPC.NPCs) do
-			if i:lower():gsub(" ", "") == String:lower():gsub(" ", "") then
-				return i
-			end
-		end
-	end
-
-	concommand.Add("setnpcpos", function(Plr, Cmd, Args)
-		if IsValid(Plr) and Plr:IsAdmin() and #Args >= 1 and #Args <= 2 and LookupString(Args[1]) then
-			local Key = Args[2]
-			if not Key or #Key > 0 then
-				local EntName = LookupString(Args[1])
-				Data[EntName][Key or "default"] = {Plr:GetPos(), Plr:GetAngles()}
-				UpdateData()
-
-				RefreshNPC(EntName)
-			end
-		elseif IsValid(Plr) and Plr:IsAdmin() then
-			Plr:PrintMessage(HUD_PRINTCONSOLE, "Invalid args")
-		end
-	end)
-
-	concommand.Add("removenpcpos", function(Plr, Cmd, Args) -- dont allow 0 positions, recreate a default one, dont allow no default either
-		if IsValid(Plr) and Plr:IsAdmin() and #Args == 2 and LookupString(Args[1]) then
-			local EntName = LookupString(Args[1])
-			local Key = Args[2]
-			if Key == "default" then
-				Plr:PrintMessage(HUD_PRINTCONSOLE, "Cannot remove the default position, change its position instead")
-			elseif Key and Data[EntName][Key] then
-				Data[EntName][Key] = nil
-				UpdateData()
-
-				RefreshNPC(EntName)
-			end
-		elseif IsValid(Plr) and Plr:IsAdmin() then
-			Plr:PrintMessage(HUD_PRINTCONSOLE, "Invalid args")
-		end
-	end)
-
-	concommand.Add("getnpcpos", function(Plr, Cmd, Args)
-		if IsValid(Plr) and Plr:IsAdmin() and #Args == 1 and LookupString(Args[1]) then
-			local EntName = LookupString(Args[1])
-			for i, v in pairs(Data[EntName]) do
-				Plr:PrintMessage(HUD_PRINTCONSOLE, EntName .. "   Key: " .. i .. "   Pos: " .. tostring(v[1]) .. "   Ang: " .. tostring(v[2]))
-			end
-		elseif IsValid(Plr) and Plr:IsAdmin() then
-			Plr:PrintMessage(HUD_PRINTCONSOLE, "Invalid args")
-		end
-	end)
-
-	concommand.Add("refreshnpcpos", function(Plr, Cmd, Args)
-		if IsValid(Plr) and Plr:IsAdmin() and #Args >= 1 and #Args <= 2 and LookupString(Args[1]) then
-			local EntName = LookupString(Args[1])
-			RefreshNPC(EntName)
-		elseif IsValid(Plr) and Plr:IsAdmin() then
-			Plr:PrintMessage(HUD_PRINTCONSOLE, "Invalid args")
-		end
-	end)
 end
 
-
-local Loaded = false
-hook.Add("InitPostEntity", "DynNPCPostEntity", function()
-	if not Loaded then
-		Loaded = true
-		Load()
+util.AddNetworkString("DynNPCMenu")
+net.Receive("DynNPCMenu", function(Len, Plr)
+	local EntName = net.ReadString()
+	local Ent = net.ReadEntity()
+	local String = net.ReadString()
+	if IsValid(Ent) then
+		if String == "Cancel" then
+			Ent:Speak(1.7, DynNPC.NPCs[EntName].Sounds.Cancel)
+		else
+			Ent:Speak(0.5, DynNPC.NPCs[EntName].Sounds.Ok)
+		end
+	end
+	for _, v in pairs(DynNPC.NPCs[EntName].Options) do
+		if String == v.Name then
+			v.Select(Plr)
+		end
 	end
 end)
 
-timer.Simple(2, function()
-	if not Loaded then
-		Loaded = true
-		Load()
+local function LookupString(String)
+	for i, v in pairs(DynNPC.NPCs) do
+		if i:lower():gsub(" ", "") == String:lower():gsub(" ", "") then
+			return i
+		end
+	end
+end
+
+concommand.Add("setnpcpos", function(Plr, Cmd, Args)
+	if IsValid(Plr) and Plr:IsAdmin() and #Args >= 1 and #Args <= 2 and LookupString(Args[1]) then
+		local Key = Args[2]
+		if not Key or #Key > 0 then
+			local EntName = LookupString(Args[1])
+			Data[EntName][Key or "default"] = {Plr:GetPos(), Plr:GetAngles()}
+			UpdateData()
+
+			RefreshNPC(EntName)
+		end
+	elseif IsValid(Plr) and Plr:IsAdmin() then
+		Plr:PrintMessage(HUD_PRINTCONSOLE, "Invalid args")
+	end
+end)
+
+concommand.Add("removenpcpos", function(Plr, Cmd, Args) -- dont allow 0 positions, recreate a default one, dont allow no default either
+	if IsValid(Plr) and Plr:IsAdmin() and #Args == 2 and LookupString(Args[1]) then
+		local EntName = LookupString(Args[1])
+		local Key = Args[2]
+		if Key == "default" then
+			Plr:PrintMessage(HUD_PRINTCONSOLE, "Cannot remove the default position, change its position instead")
+		elseif Key and Data[EntName][Key] then
+			Data[EntName][Key] = nil
+			UpdateData()
+
+			RefreshNPC(EntName)
+		end
+	elseif IsValid(Plr) and Plr:IsAdmin() then
+		Plr:PrintMessage(HUD_PRINTCONSOLE, "Invalid args")
+	end
+end)
+
+concommand.Add("getnpcpos", function(Plr, Cmd, Args)
+	if IsValid(Plr) and Plr:IsAdmin() and #Args == 1 and LookupString(Args[1]) then
+		local EntName = LookupString(Args[1])
+		for i, v in pairs(Data[EntName]) do
+			Plr:PrintMessage(HUD_PRINTCONSOLE, EntName .. "   Key: " .. i .. "   Pos: " .. tostring(v[1]) .. "   Ang: " .. tostring(v[2]))
+		end
+	elseif IsValid(Plr) and Plr:IsAdmin() then
+		Plr:PrintMessage(HUD_PRINTCONSOLE, "Invalid args")
+	end
+end)
+
+concommand.Add("refreshnpcpos", function(Plr, Cmd, Args)
+	if IsValid(Plr) and Plr:IsAdmin() and #Args >= 1 and #Args <= 2 and LookupString(Args[1]) then
+		local EntName = LookupString(Args[1])
+		RefreshNPC(EntName)
+	elseif IsValid(Plr) and Plr:IsAdmin() then
+		Plr:PrintMessage(HUD_PRINTCONSOLE, "Invalid args")
 	end
 end)

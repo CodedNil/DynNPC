@@ -1,8 +1,6 @@
 TOOL.Category = "GreyRP"
 TOOL.Name = "#tool.propertydev.name"
 
-TOOL.ClientConVar["door_class"] = "prop_dynamic"
-
 TOOL.Information = {
     {name = "left"},
     {name = "right"},
@@ -14,6 +12,7 @@ local PropertyDataFormat = {
     Price = 100,
     Rent = 0,
     Business = false,
+    Warehouse = false,
 
     Start = Vector(),
     End = Vector(),
@@ -29,6 +28,7 @@ local PropertyDataFormatView = {
     "Price",
     "Rent",
     "Business",
+    "Warehouse",
     "BUSINESS",
     "Job",
     "ADVANCED",
@@ -38,36 +38,57 @@ local PropertyDataFormatView = {
 
 if SERVER then
     util.AddNetworkString("PropertiesDev")
-    GlobalProperties = GreyRP.GetData("property")
-    local function UpdateData()
-    	GreyRP.SetData("property", GlobalProperties)
-    end
+    GlobalProperties = {}
 
-    for i, v in pairs(PropertyDataFormat) do
-        for x, y in pairs(GlobalProperties) do
-            if y[i] == nil or type(y[i]) ~= type(v) then
-                if type(v) == "table" then
-                    y[i] = table.Copy(v)
-                else
-                    y[i] = v
+    local function Load()
+        GlobalProperties = GreyRP.GetData("property")
+        for i, v in pairs(PropertyDataFormat) do
+            for x, y in pairs(GlobalProperties) do
+                if y[i] == nil or type(y[i]) ~= type(v) then
+                    if type(v) == "table" then
+                        y[i] = table.Copy(v)
+                    else
+                        y[i] = v
+                    end
+                end
+            end
+        end
+        for i, v in pairs(GlobalProperties) do
+            for x, y in pairs(v) do
+                if x ~= "Container" and PropertyDataFormat[x] == nil  then
+                    v[x] = nil
                 end
             end
         end
     end
-    for i, v in pairs(GlobalProperties) do
-        for x, y in pairs(v) do
-            if x ~= "Container" and PropertyDataFormat[x] == nil  then
-                v[x] = nil
-            end
-        end
+    ENTITIES_LOADED = ENTITIES_LOADED or false
+    if ENTITIES_LOADED then
+        Load()
+    else
+        hook.Add("InitPostEntity", "GreyRPPostEntity", function()
+        	ENTITIES_LOADED = true
+            timer.Simple(2, Load)
+        end)
+    end
+
+    local function UpdateData()
+    	GreyRP.SetData("property", GlobalProperties)
     end
 
     net.Receive("PropertiesDev", function(_, Plr)
     	local Type = net.ReadString()
     	if Type == "Get" then
+            local Tbl = table.Copy(GlobalProperties)
+            for i, v in pairs(Tbl) do
+                local NewDoors = {}
+                for _, x in pairs(v.Doors) do
+                    NewDoors[#NewDoors + 1] = x:EntIndex()
+                end
+                v.Doors = NewDoors
+            end
     		net.Start("PropertiesDev")
     			net.WriteInt(0, 10)
-    			net.WriteTable(GlobalProperties)
+    			net.WriteTable(Tbl)
     		net.Send(Plr)
     		return
     	end
@@ -83,6 +104,8 @@ if SERVER then
                     net.Send(v)
                 end
             end
+            UpdateData()
+            return
         elseif Type == "Remove" then
             GlobalProperties[Property] = nil
             for _, v in pairs(player.GetAll()) do
@@ -92,31 +115,32 @@ if SERVER then
                     net.Send(v)
                 end
             end
-        elseif Type == "Update" then
-            local Var = net.ReadString()
-            if Var == "Position" then
-                local New = net.ReadTable()
-                GlobalProperties[Property].Start, GlobalProperties[Property].End = New[1], New[2]
-            	for _, v in pairs(player.GetAll()) do
-            		if v ~= Plr then
-                        net.Start("PropertiesDev")
-                            net.WriteInt(Property, 10)
-                            net.WriteString("Position")
-                            net.WriteType(New)
-                        net.Send(v)
-                    end
+            UpdateData()
+            return
+        end
+        local Var = net.ReadString()
+        if Var == "Position" then
+            local New = net.ReadTable()
+            GlobalProperties[Property].Start, GlobalProperties[Property].End = New[1], New[2]
+        	for _, v in pairs(player.GetAll()) do
+        		if v ~= Plr then
+                    net.Start("PropertiesDev")
+                        net.WriteInt(Property, 10)
+                        net.WriteString("Position")
+                        net.WriteType(New)
+                    net.Send(v)
                 end
-            else
-                local New = net.ReadType()
-                GlobalProperties[Property][Var] = New
-            	for _, v in pairs(player.GetAll()) do
-            		if v ~= Plr then
-            			net.Start("PropertiesDev")
-            				net.WriteInt(Property, 10)
-            				net.WriteString(Var)
-                            net.WriteType(New)
-            			net.Send(v)
-                    end
+            end
+        else
+            local New = net.ReadType()
+            GlobalProperties[Property][Var] = New
+        	for _, v in pairs(player.GetAll()) do
+        		if v ~= Plr then
+        			net.Start("PropertiesDev")
+        				net.WriteInt(Property, 10)
+        				net.WriteString(Var)
+                        net.WriteType(New)
+        			net.Send(v)
                 end
             end
         end
@@ -125,7 +149,7 @@ if SERVER then
 end
 if CLIENT then
     local function CheckNumericCustom(self, Val)
-        return not string.find("1234567890", Val, 1, true)
+        return not (string.find("1234567890", Val, 1, true) or string.find("-", Val, 1, true))
     end
 
     local function GetSimilarEnt(Ent, Pos, Distance)
@@ -237,11 +261,11 @@ if CLIENT then
     	end
     end)
 
-    timer.Simple(0.5, function()
-    	net.Start("PropertiesDev")
-    		net.WriteString("Get")
-    	net.SendToServer()
+    timer.Simple(1, function()
         Plr = LocalPlayer()
+        net.Start("PropertiesDev")
+            net.WriteString("Get")
+        net.SendToServer()
     end)
 
     Properties = {}
@@ -300,12 +324,43 @@ if CLIENT then
         for i, v in pairs(Properties.GetAll()) do
             local Start, End = v.Start - Vector(5, 5, 5), v.End + Vector(5, 5, 5)
             OrderVectors(Start, End)
-            if i ~= Property and not v.Business and LProp.Start:WithinAABox(Start, End) and LProp.End:WithinAABox(Start, End) then
+            if i ~= Property and not v.Business and not v.Warehouse and LProp.Start:WithinAABox(Start, End) and LProp.End:WithinAABox(Start, End) then
                 Properties.UpdateVariable(Property, "Container", i)
                 return
             end
         end
         Properties.UpdateVariable(Property, "Container")
+    end
+    function Properties.IsContainer(Property)
+        for _, v in pairs(Properties.GetAll()) do
+            if v.Container == Property then
+                return true
+            end
+        end
+        return false
+    end
+    function Properties.GetContained(Property)
+        for i, v in pairs(Properties.GetAll()) do
+            if v.Container == Property then
+                return i
+            end
+        end
+    end
+    function Properties.ValidateDoors(Property)
+        if not Properties.Exists(Property) then
+            return true
+        end
+        local LProp = GlobalProperties[Property]
+        for i, v in pairs(LProp.Doors) do
+            if type(v) == "number" and IsValid(ents.GetByIndex(v)) then
+                LProp.Doors[i] = ents.GetByIndex(v)
+            end
+        end
+        for i, v in pairs(LProp.Doors) do
+            if type(v) == "number" then
+                return true
+            end
+        end
     end
 
     function Properties.UpdateVariable(Property, Var, New)
@@ -332,7 +387,7 @@ if CLIENT then
                 net.WriteString(Var)
                 net.WriteType(New)
             net.SendToServer()
-            if Var == "Start" or Var == "End" or Var == "Business" then
+            if Var == "Start" or Var == "End" or Var == "Business" or Var == "Warehouse" then
                 for i, _ in pairs(GlobalProperties) do
                     Properties.CheckContainer(i)
                 end
@@ -363,6 +418,19 @@ if CLIENT then
         table.insert(Tbl, New)
         Properties.UpdateVariable(Property, Var, Tbl)
     end
+    function Properties.RemoveTableVariable(Property, Var, Key)
+        if not GlobalProperties[Property] or GlobalProperties[Property][Var] == nil then
+            return
+        end
+        local Tbl = table.Copy(GlobalProperties[Property][Var])
+        for i, _ in pairs(Tbl) do
+            if i == Key then
+                table.remove(Tbl, i)
+                break
+            end
+        end
+        Properties.UpdateVariable(Property, Var, Tbl)
+    end
 
     local Planes = {}
     local Face
@@ -378,7 +446,7 @@ if CLIENT then
                 local Pos = (v.Start + v.End) / 2
                 local MinS = Vector(math.min(Pos.x - v.Start.x, Pos.x - v.End.x), math.min(Pos.y - v.Start.y, Pos.y - v.End.y), math.min(Pos.z - v.Start.z, Pos.z - v.End.z))
                 local MaxS = Vector(math.max(Pos.x - v.Start.x, Pos.x - v.End.x), math.max(Pos.y - v.Start.y, Pos.y - v.End.y), math.max(Pos.z - v.Start.z, Pos.z - v.End.z))
-                local HitPos, HitNormal = util.IntersectRayWithOBB(Trace.StartPos, Trace.Normal * 10000, Pos, Angle(), MinS, MaxS)
+                local HitPos, HitNormal = util.IntersectRayWithOBB(Trace.StartPos, Trace.Normal * 10000, Pos, Angle(), MinS - Vector(2, 2, 2), MaxS + Vector(2, 2, 2))
                 if HitPos and (not Closest or (Trace.StartPos - HitPos):Length() < ClosestDist) then
                     if self.SelectedProperty == i then
                         TargetSelf = true
@@ -435,6 +503,9 @@ if CLIENT then
                 return true
             end
         elseif self.EditMode == "Door" then
+            if Properties.ValidateDoors(self.SelectedProperty) then
+                return
+            end
             if Trace.Entity and Trace.Entity:isDoor() and not table.HasValue(Properties.GetVariable(self.SelectedProperty, "Doors", {}), Trace.Entity) then
                 Properties.InsertTableVariable(self.SelectedProperty, "Doors", Trace.Entity)
                 return true
@@ -449,7 +520,7 @@ if CLIENT then
                 local MinS = Vector(math.min(Pos.x - v.Start.x, Pos.x - v.End.x), math.min(Pos.y - v.Start.y, Pos.y - v.End.y), math.min(Pos.z - v.Start.z, Pos.z - v.End.z))
                 local MaxS = Vector(math.max(Pos.x - v.Start.x, Pos.x - v.End.x), math.max(Pos.y - v.Start.y, Pos.y - v.End.y), math.max(Pos.z - v.Start.z, Pos.z - v.End.z))
                 local HitPos, HitNormal = util.IntersectRayWithOBB(Trace.StartPos, Trace.Normal * 10000, Pos, Angle(), MinS, MaxS)
-                local InBox = Trace.StartPos:WithinAABox(v.Start - Vector(20, 20, 20), v.End + Vector(20, 20, 20))
+                local InBox = Trace.StartPos:WithinAABox(Pos + MinS - Vector(20, 20, 20), Pos + MaxS + Vector(20, 20, 20))
                 if HitPos and not InBox then
                     Face = GetFaceFromNormal(HitNormal)
                     Plr:GetActiveWeapon():DoShootEffect(HitPos, HitNormal, nil, 1, IsFirstTimePredicted())
@@ -499,6 +570,9 @@ if CLIENT then
             Planes = {}
             return true
         elseif self.EditMode == "Door" then
+            if Properties.ValidateDoors(self.SelectedProperty) then
+                return
+            end
             if Trace.Entity and Trace.Entity:isDoor() and table.HasValue(Properties.GetVariable(self.SelectedProperty, "Doors", {}), Trace.Entity) then
                 for i, v in pairs(Properties.GetVariable(self.SelectedProperty, "Doors")) do
                     if v == Trace.Entity then
@@ -518,11 +592,7 @@ if CLIENT then
                 end
             end
             if Closest and not util.TraceLine({start = Trace.StartPos, endpos = ClosestPos, filter = Plr}).Hit then
-                for i, _ in pairs(Properties.GetVariable(self.SelectedProperty, "Cameras")) do
-                    if i == Closest then
-                        Properties.UpdateTableVariable(self.SelectedProperty, "Cameras", i, nil)
-                    end
-                end
+                Properties.RemoveTableVariable(self.SelectedProperty, "Cameras", Closest)
                 Plr:GetActiveWeapon():DoShootEffect(ClosestPos, ClosestNormal, nil, 1, IsFirstTimePredicted())
             end
         elseif self.EditMode == "Expand" then
@@ -603,7 +673,7 @@ if CLIENT then
         local Container = Properties.GetVariable(StartSelection, "Container")
         local Stage = "Data"
         for _, v in pairs(PropertyDataFormatView) do
-            if Container and (v == "Price" or v == "Rent" or v == "Business") then
+            if Container and (v == "Price" or v == "Rent" or v == "Business" or v == "Warehouse") then
                 continue
             end
             if v:upper() == v then
@@ -731,6 +801,9 @@ if CLIENT then
                     return
                 end
                 local OldProperty = Properties.Get(StartSelection)
+                if Properties.ValidateDoors(StartSelection) then
+                    return
+                end
                 local ContainerPos = (ContainerProperty.Start + ContainerProperty.End) / 2
                 local OldPos = (OldProperty.Start + OldProperty.End) / 2
 
@@ -775,6 +848,7 @@ if CLIENT then
                 Properties.UpdateVariable(Property, "Position", {NewStart, NewEnd})
                 Properties.UpdateVariable(Property, "Price", OldProperty.Price)
                 Properties.UpdateVariable(Property, "Business", OldProperty.Business)
+                Properties.UpdateVariable(Property, "Warehouse", OldProperty.Warehouse)
 
                 local NewCameras = {}
                 for i, v in pairs(OldProperty.Cameras) do
@@ -811,6 +885,9 @@ if CLIENT then
             DuplicateUp:SetText("Duplicate 1 floor up")
             function DuplicateUp.DoClick()
                 local OldProperty = Properties.Get(StartSelection)
+                if Properties.ValidateDoors(StartSelection) then
+                    return
+                end
                 local UpHeight
                 for i, v in pairs(OldProperty.Doors) do
                     local NewPos = v:GetPos() + Vector(0, 0, 140)
@@ -841,6 +918,7 @@ if CLIENT then
                 Properties.UpdateVariable(Property, "Position", {OldProperty.Start + UpHeight, OldProperty.End + UpHeight})
                 Properties.UpdateVariable(Property, "Price", OldProperty.Price)
                 Properties.UpdateVariable(Property, "Business", OldProperty.Business)
+                Properties.UpdateVariable(Property, "Warehouse", OldProperty.Warehouse)
 
                 local NewCameras = {}
                 for i, v in pairs(OldProperty.Cameras) do
@@ -917,13 +995,6 @@ if CLIENT then
     	draw.SimpleText("Mode: " .. self.EditMode, "DermaLarge", w / 2, h * 0.45, Color(200, 200, 200, 255), TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
     	draw.SimpleText("Selection:", "DermaLarge", w / 2, h * 0.6, Color(200, 200, 200, 255), TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
     	draw.SimpleText(self.SelectedProperty and Properties.GetVariable(self.SelectedProperty, "Name") or "None", "DermaLarge", w / 2, h * 0.7, Color(200, 200, 200, 255), TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
-
-        if Properties.Exists(self.SelectedProperty) then
-            local Start, End = Properties.GetVariable(self.SelectedProperty, "Start"), Properties.GetVariable(self.SelectedProperty, "End")
-            local Height = math.Round(math.abs(Start.z - End.z) / 160)
-            local XFeet, YFeet = math.Round(math.abs(Start.x - End.x) / 16), math.Round(math.abs(Start.y - End.y) / 16)
-        	draw.SimpleText(Height .. "   " .. XFeet * YFeet, "DermaLarge", w / 2, h * 0.85, Color(200, 200, 200, 255), TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
-        end
     end
 
     local CameraModels = {}
@@ -934,6 +1005,133 @@ if CLIENT then
     		CameraModels[i]:SetModelScale(2)
     	end
     	return CameraModels[i]
+    end
+
+    --local function LerpN(a, b, t)
+    --    return a * (1 - t) + b * t
+    --end
+    local function BoundTrace(Start, Direction)
+        local tr = {}
+        tr.start = Start - Direction
+        tr.endpos = Start + Direction * 1000
+        tr.mask = 1 + 2
+        local Trace = util.TraceLine(tr)
+        if Trace.Hit and Trace.MatType ~= MAT_WOOD then
+            return math.Round(Trace.HitPos.x), math.Round(Trace.HitPos.y)
+        end
+    end
+    local function RemoveNearNodes(Nodes, N)
+        for i, v in pairs(Nodes) do
+            if math.abs(v[1] - N[1]) < 20 and math.abs(v[2] - N[2]) < 20 then
+                table.remove(Nodes, i)
+            end
+        end
+    end
+    local function GetBoundsArea(Nodes)
+        local Area = 0
+        local j = #Nodes
+        for i, v in pairs(Nodes) do
+            Area = Area + (Nodes[j][1] + v[1]) * (Nodes[j][2] - v[2])
+            j = i
+        end
+        return Area / 2
+    end
+    local BoundsCache = {}
+    local function GetBounds(Index)
+        if BoundsCache[Index] then
+            return BoundsCache[Index][1], BoundsCache[Index][2]
+        end
+        local Quality = 3
+        local Prop = Properties.Get(Index)
+        local Start, End = Vector(Prop.Start), Vector(Prop.End)
+        OrderVectors(Start, End)
+        local Height = End.z - 2
+        local NodesA, NodesB, NodesC, NodesD = {}, {}, {}, {}
+        local lx, ly
+        for i = Start.y, End.y, Quality do
+            local x, y = BoundTrace(Vector(Start.x, i, Height), Vector(1, 0, 0))
+            --print(x and lx ~= x, not ly or y - ly > 15, ly and y - ly)
+            --if x and lx ~= x and (not ly or y - ly > 15) then
+            --    if lx and y - ly > 20 then
+            if x and lx ~= x then
+                if lx then
+                    NodesA[#NodesA + 1] = {lx, y}
+                end
+                if ly and y - ly > 500 then
+                    break
+                end
+                NodesA[#NodesA + 1] = {x, y}
+                lx, ly = x, y
+            end
+        end
+        local l = lx
+        lx, ly = nil, nil
+        for i = l, End.x, Quality do
+            local x, y = BoundTrace(Vector(i, End.y, Height), Vector(0, -1, 0))
+            if y and ly ~= y then
+                if ly then
+                    RemoveNearNodes(NodesA, {x, ly})
+                    NodesB[#NodesB + 1] = {x, ly}
+                end
+                NodesB[#NodesB + 1] = {x, y}
+                lx, ly = x, y
+            end
+        end
+        l = ly
+        lx, ly = nil, nil
+        if l then
+            for i = l, Start.y, -Quality do
+                local x, y = BoundTrace(Vector(End.x, i, Height), Vector(-1, 0, 0))
+                if x and lx ~= x then
+                    if lx then
+                        RemoveNearNodes(NodesB, {lx, y})
+                        NodesC[#NodesC + 1] = {lx, y}
+                    end
+                    NodesC[#NodesC + 1] = {x, y}
+                    lx, ly = x, y
+                end
+            end
+        end
+        l = lx
+        lx, ly = nil, nil
+        if l then
+            for i = l, Start.x, -Quality do
+                local x, y = BoundTrace(Vector(i, Start.y, Height), Vector(0, 1, 0))
+                if y and ly ~= y then
+                    if ly then
+                        RemoveNearNodes(NodesA, {x, ly})
+                        RemoveNearNodes(NodesC, {x, ly})
+                        NodesD[#NodesD + 1] = {x, ly}
+                    end
+                    RemoveNearNodes(NodesA, {x, y})
+                    NodesD[#NodesD + 1] = {x, y}
+                    lx, ly = x, y
+                end
+            end
+        end
+        local Nodes = NodesA
+        for _, v in pairs(NodesB) do
+            Nodes[#Nodes + 1] = v
+        end
+        for _, v in pairs(NodesC) do
+            Nodes[#Nodes + 1] = v
+        end
+        for _, v in pairs(NodesD) do
+            Nodes[#Nodes + 1] = v
+        end
+        local NewNodes = Nodes
+        NewNodes[#NewNodes + 1] = NewNodes[1]
+
+        BoundsCache[Index] = {Nodes, Height}
+        return BoundsCache[Index][1], BoundsCache[Index][2]
+    end
+
+    function Properties.GetSquareFootage(Index)
+        if not Properties.Exists(Index) then
+            return
+        end
+    	local Prop = Properties.Get(Index)
+    	return ((Prop.Business or Prop.Container) and math.Round(math.abs(Prop.Start.x - Prop.End.x)) * math.Round(math.abs(Prop.Start.y - Prop.End.y)) or GetBoundsArea(GetBounds(Index))) / 256 * 0.8
     end
 
     local WhiteMaterial = CreateMaterial("WhiteMaterial", "UnlitGeneric", {
@@ -997,7 +1195,7 @@ if CLIENT then
                         render.DrawBeam(Vector(X, AY - LineLength, Z), Vector(X, AY + LineLength, Z), 2, 0, 0, Color(0, 255, 0, 255))
                     end
                     if X and Y then
-                        render.DrawBeam(Vector(X, Y, AZ - LineLength), Vector(X, Y, AZ + LineLength), 2, 0, 1, Color(0, 0, 255, 255))
+                        render.DrawBeam(Vector(X, Y, AZ - LineLength), Vector(X, Y, AZ + LineLength), 2, 0, 0, Color(0, 0, 255, 255))
                     end
                 cam.IgnoreZ(false)
             end
@@ -1017,6 +1215,25 @@ if CLIENT then
             if not SelfSelected then
                 continue
             end
+
+            if not v.Business and not v.Container then
+                local Bounds, Height = GetBounds(i)
+                local LastBound
+                cam.IgnoreZ(true)
+                for f, g in pairs(Bounds) do
+                    local e = (f / #Bounds) * 255
+                    if LastBound then
+                        render.SetColorMaterial()
+                        render.DrawBeam(Vector(LastBound[1], LastBound[2], Height), Vector(g[1], g[2], Height), 2, 0, 0, Color(e, e, e, 255), false)
+                    end
+                    render.DrawSphere(Vector(g[1], g[2], Height), 1, 20, 20, Color(e, e, e, 255))
+                    render.DrawSphere(Vector(g[1], g[2], Height), 5, 20, 20, Color(e, e, e, 150))
+                    LastBound = g
+                end
+                render.DrawBeam(Vector(Bounds[1][1], Bounds[1][2], Height), Vector(Bounds[#Bounds][1], Bounds[#Bounds][2], Height), 2, 0, 0, Color(0, 0, 0, 255), false)
+                cam.IgnoreZ(false)
+            end
+
             if Face then
                 local Normal = GetFaceNormals(Face)
                 local Position = Pos + MaxS * Normal
@@ -1034,13 +1251,14 @@ if CLIENT then
             if #v.Doors > 0 then
                 render.MaterialOverride(WhiteMaterial)
                 render.SetBlend(0.3)
+                Properties.ValidateDoors(i)
                 for _, x in pairs(v.Doors) do
-                    if not IsValid(x) then
+                    if type(x) == "number" or not IsValid(x) then
                         continue
                     end
                     local NewStart, NewEnd = Vector(v.Start), Vector(v.End)
                     OrderVectors(NewStart, NewEnd)
-                    local InBox = x:GetPos():WithinAABox(NewStart - Vector(20, 20, 20), NewEnd + Vector(20, 20, 20))
+                    local InBox = x:GetPos():WithinAABox(NewStart - Vector(100, 100, 100), NewEnd + Vector(100, 100, 100))
                     render.SetColorModulation(InBox and 0 or 1, 1, 0)
                     cam.Start3D()
                         x:DrawModel()
@@ -1086,20 +1304,13 @@ if CLIENT then
                 if (LocalPlayer():EyePos() - Pos):Dot(Ang:Up()) < 0 then
                     Ang:RotateAroundAxis(Ang:Right(), 180)
                 end
-                local IsContainer = false
-                for _, x in pairs(Properties.GetAll()) do
-                    if x.Container == i then
-                        IsContainer = true
-                        break
-                    end
-                end
                 surface.SetFont("DermaLarge")
                 cam.Start3D2D(Pos, Ang, v.Container and 0.4 or 0.7)
                     local _, Height = surface.GetTextSize("Text")
                     local Text = {
                         v.Name,
                         v.Container and Properties.GetVariable(v.Container, "Name", "nil") or (v.Price > 0 or v.Rent > 0) and (v.Price > 0 and "Price: " .. DarkRP.formatMoney(v.Price) .. (v.Rent > 0 and "  " or "") or "") .. (v.Rent > 0 and "Rent: " .. DarkRP.formatMoney(v.Rent) or "") or "Unownable",
-                        IsContainer and "Apartment Building" or v.Container and "Apartment" or (v.Price > 0 or v.Rent > 0) and (v.Business and "Business" or "House") or nil
+                        Properties.IsContainer(i) and "Apartment Building" or v.Container and "Apartment" or (v.Price > 0 or v.Rent > 0) and (v.Warehouse and "Warehouse" or v.Business and "Business" or "House") or nil
                     }
                     local Col = SelfSelected and Color(0, 255, 0, 255) or Color(255, 0, 0, 255)
         			surface.SetTextColor(Color(0, 0, 0, 255))
