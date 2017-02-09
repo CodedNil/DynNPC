@@ -1,13 +1,29 @@
-local MinZoom, MaxZoom = 500, 2000
+local MinZoom, MaxZoom = 500, 4000
 local RenderingMap = false
 
 GreyRP = GreyRP or {}
-GreyRP.PanelData = GreyRP.PanelData or {}
+--GreyRP.PanelData = GreyRP.PanelData or {}
 GreyRP.MapWaypoints = {}
 timer.Create("MapWaypointUpdate", 1, 0, function()
 	GreyRP.MapWaypoints = {}
 	hook.Run("GetMapWaypoints")
 end)
+
+MapIconMaterials = MapIconMaterials or {}
+MapFonts = {}
+
+local function GetFont(Size, Weight)
+	Size = math.Round(Size)
+	if not MapFonts[Size] then
+		MapFonts[Size] = true
+		surface.CreateFont("MapFont" .. Size, {
+			font = "Trebuchet",
+			size = Size,
+			weight = Weight
+		})
+	end
+	return "MapFont" .. Size
+end
 
 function GreyRP:SetupMapPanel(sx, sy, sz, Id)
 	self:SetMouseInputEnabled(true)
@@ -15,7 +31,7 @@ function GreyRP:SetupMapPanel(sx, sy, sz, Id)
 
 	self.LastUpdate = 0
 
-	if Id then
+	--[[if Id then
 		if GreyRP.PanelData[Id] then
 			Id = GreyRP.PanelData[Id]
 			self.TransX, self.TransY = Id.x, Id.y
@@ -29,7 +45,9 @@ function GreyRP:SetupMapPanel(sx, sy, sz, Id)
 	else
 		self.TransX, self.TransY = sx, sy
 		self.Zoom = sz
-	end
+	end]]
+	self.TransX, self.TransY = sx, sy
+	self.Zoom = sz
 
 	function self:GetVector()
 		return Vector(self.TransY, self.TransX, 1600)
@@ -38,17 +56,46 @@ function GreyRP:SetupMapPanel(sx, sy, sz, Id)
 	function self:SetTrans(x, y)
 		self.TransX = x
 		self.TransY = y
-		if Id then
-			Id.x, Id.y = self.TransX, self.TransY
+		--if Id then
+		--	Id.x, Id.y = self.TransX, self.TransY
+		--end
+	end
+
+	function self:ChangeTrans(x, y)
+		if x then
+			self.TransX = self.TransX + x
+			--if Id then
+			--	Id.x = self.TransX
+			--end
+		end
+		if y then
+			self.TransY = self.TransY + y
+			--if Id then
+			--	Id.y = self.TransY
+			--end
 		end
 	end
 
 	function self:Paint(w, h)
-		if RealTime() - self.LastUpdate > 0.1 then
+		if RealTime() - self.LastUpdate > 0.5 then
 			net.Start("MapPositionData")
 				net.WriteVector(self:GetVector())
 			net.SendToServer()
 			self.LastUpdate = RealTime()
+		end
+		if not self.Dragging then
+			if input.IsKeyDown(KEY_W) or input.IsKeyDown(KEY_UP) then
+				self:ChangeTrans(nil, 20)
+			end
+			if input.IsKeyDown(KEY_S) or input.IsKeyDown(KEY_DOWN) then
+				self:ChangeTrans(nil, -20)
+			end
+			if input.IsKeyDown(KEY_A) or input.IsKeyDown(KEY_LEFT) then
+				self:ChangeTrans(20)
+			end
+			if input.IsKeyDown(KEY_D) or input.IsKeyDown(KEY_RIGHT) then
+				self:ChangeTrans(-20)
+			end
 		end
 		local x, y = self:LocalToScreen()
 		local OldW, OldH = ScrW(), ScrH()
@@ -56,42 +103,72 @@ function GreyRP:SetupMapPanel(sx, sy, sz, Id)
 			render.Clear(0, 0, 0, 0)
 			cam.Start2D()
 				RenderingMap = true
-				local OrthoAmount = self.Zoom
-				render.RenderView({
-					origin = self:GetVector(),
-					angles = Angle(90, 0, 0),
-					x = x,
-					y = y,
-					w = w,
-					h = h,
-					ortho = true,
-					ortholeft = -OrthoAmount / 1000 * w,
-					orthoright = OrthoAmount / 1000 * w,
-					orthotop = -OrthoAmount / 1000 * h,
-					orthobottom = OrthoAmount / 1000 * h,
-					drawhud = false,
-					drawviewmodel = false
-				})
+					local PlrDraws = {}
+					for _, v in pairs(player.GetAll()) do
+						if not v:GetNoDraw() then
+							PlrDraws[#PlrDraws + 1] = v
+							v:SetNoDraw(true)
+						end
+					end
+					local OrthoAmount = self.Zoom
+					render.RenderView({
+						origin = self:GetVector(),
+						angles = Angle(90, 0, 0),
+						x = x,
+						y = y,
+						w = w,
+						h = h,
+						ortho = true,
+						ortholeft = -OrthoAmount / 1000 * w,
+						orthoright = OrthoAmount / 1000 * w,
+						orthotop = -OrthoAmount / 1000 * h,
+						orthobottom = OrthoAmount / 1000 * h,
+						drawviewmodel = false
+					})
+					for _, v in pairs(PlrDraws) do
+						v:SetNoDraw(false)
+					end
 				RenderingMap = false
-
 			cam.End2D()
 		render.SetViewPort(0, 0, OldW, OldH)
 
-		surface.SetDrawColor(255, 255, 255, 255)
-		--surface.DrawRect(w / 2 - 3, h / 2 - 3, 6, 6)
 		for _, v in pairs(GreyRP.MapWaypoints) do
-			local Size = 100 * 1 / (self.Zoom / 1000)
-			local tx, ty = (self.TransX - v[2].y) / self.Zoom * 500, (self.TransY - v[2].x) / self.Zoom * 500
-			surface.DrawRect(w / 2 - Size / 2 + tx, h / 2 - Size / 2 + ty, Size, Size)
+			local tx, ty = w / 2 + (self.TransX - v[2].y) / self.Zoom * 500, h / 2 + (self.TransY - v[2].x) / self.Zoom * 500
+			local yx, yy = w / 2 + (self.TransX - v[3].y) / self.Zoom * 500, h / 2 + (self.TransY - v[3].x) / self.Zoom * 500
+			if not MapIconMaterials[v[4]] then
+				MapIconMaterials[v[4]] = Material("icon16/" .. v[4] .. ".png")
+			end
+			if gui.MouseX() < x + tx and gui.MouseX() > x + yx and gui.MouseY() < y + ty and gui.MouseY() > y + yy then
+				surface.SetDrawColor(v[5].r, v[5].g, v[5].b, 200)
+				surface.DrawRect(yx, yy, tx - yx, ty - yy)
+				local Gap = 150 / self.Zoom * 500
+				for e, g in pairs(v[6]) do
+					draw.SimpleText(g[1], GetFont(g[2] / self.Zoom * 500, 1000), tx - (tx - yx) / 2, ty - (ty - yy) / 2 + Gap * (e - (#v[6] + 1) / 2), Color(0, 0, 0, 255), TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
+				end
+			else
+				surface.SetDrawColor(v[5].r, v[5].g, v[5].b, 100)
+				surface.DrawRect(yx, yy, tx - yx, ty - yy)
+				surface.SetDrawColor(Color(255, 255, 255, 255))
+				surface.SetMaterial(MapIconMaterials[v[4]])
+				surface.DrawTexturedRectRotated((tx + yx) / 2, (ty + yy) / 2, 300 / self.Zoom * 500, 300 / self.Zoom * 500, 0)
+			end
 		end
+		if not MapIconMaterials["arrow_up"] then
+			MapIconMaterials["arrow_up"] = Material("icon16/arrow_up.png")
+		end
+		local PlrPos = LocalPlayer():EyePos()
+		local tx, ty = w / 2 + (self.TransX - PlrPos.y) / self.Zoom * 500, h / 2 + (self.TransY - PlrPos.x) / self.Zoom * 500
+		surface.SetDrawColor(255, 0, 0, 255)
+		surface.SetMaterial(MapIconMaterials["arrow_up"])
+		surface.DrawTexturedRectRotated(tx, ty, 50, 50, LocalPlayer():EyeAngles().y)
 		draw.DrawText("TransX: " .. self.TransX .. " TransY: " .. self.TransY .. " Zoom: " .. self.Zoom, "DermaDefault", 50, 50, Color(255, 255, 255, 255), TEXT_ALIGN_LEFT)
 	end
 
 	function self:OnMouseWheeled(Delta)
-		self.Zoom = math.Clamp(self.Zoom - Delta * 20, MinZoom, MaxZoom)
-		if Id then
-			Id.z = self.Zoom
-		end
+		self.Zoom = math.Clamp(self.Zoom - Delta * 50, MinZoom, MaxZoom)
+		--if Id then
+		--	Id.z = self.Zoom
+		--end
 	end
 
 	function self:OnCursorMoved(x, y)
@@ -144,7 +221,7 @@ hook.Add("ShouldDrawLocalPlayer", "MapRender", function()
 end)
 
 local Menu
-local function OpenMenu()
+local function OpenMenu(x, y, z)
 	if Menu and IsValid(Menu) then
 		Menu:Remove()
 	end
@@ -165,11 +242,11 @@ local function OpenMenu()
 
 	local Panel = vgui.Create("Panel", Menu)
 	Panel:Dock(FILL)
-	GreyRP.SetupMapPanel(Panel, EyePos().y, EyePos().x, (MinZoom + MaxZoom) / 2, "map_menu")
+	GreyRP.SetupMapPanel(Panel, y or EyePos().y, x or EyePos().x, z or (MinZoom + MaxZoom) / 2, "map_menu")
 end
 
-concommand.Add("greymap_open", function()
-	OpenMenu()
+concommand.Add("greymap_open", function(Plr, Cmd, Args)
+	OpenMenu(unpack(Args))
 end)
 
 --[[
