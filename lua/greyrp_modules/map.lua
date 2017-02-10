@@ -1,10 +1,8 @@
 local Data = {}
 
-hook.Add("SetupPlayerVisibility", "PropertiesRenderCameras", function()
-	for _, v in pairs(player.GetAll()) do
-		if Data[v] then
-			AddOriginToPVS(Data[v])
-		end
+hook.Add("SetupPlayerVisibility", "MapRender", function(Plr)
+	if Data[Plr] then
+		AddOriginToPVS(Data[Plr])
 	end
 end)
 

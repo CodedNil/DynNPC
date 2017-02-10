@@ -309,25 +309,6 @@ function ReplacementOpenMenu(self,  pControlOpener)
 	self.Menu:Open(x, y, false, self)
 end
 
---[[local CircleCache = {}
-function draw.Circle(x, y, radius, seg)
-	if CircleCache[x .. "," .. y .. "," .. radius .. "," .. seg] then
-		surface.DrawPoly(CircleCache[x .. "," .. y .. "," .. radius .. "," .. seg])
-		return
-	end
-	local Circle = {}
-	Circle[1] = {x = x, y = y, u = 0.5, v = 0.5}
-	for i = 0, seg do
-		local a = math.rad((i / seg) * -360)
-		Circle[i + 2] = {x = x + math.sin(a) * radius, y = y + math.cos(a) * radius, u = math.sin(a) / 2 + 0.5, v = math.cos(a) / 2 + 0.5}
-	end
-	Circle[seg + 2] = {x = x, y = y + radius, u = 0.5, v = 1}
-	CircleCache[x .. "," .. y .. "," .. radius .. "," .. seg] = Circle
-	surface.DrawPoly(Circle)
-end]]
-
-local MapMaterial = Material("icon16/map.png")
-
 local CurMenuProperty
 net.Receive("PropertiesMenuNet", function(Len, Plr)
 	local Frame = vgui.Create("DFrame")
@@ -583,6 +564,9 @@ net.Receive("PropertiesMenuNet", function(Len, Plr)
 	end
 	function ReSearch()
 		List:Clear()
+		if CurrentHeader == "Rent" or CurrentHeader == "Warehouse" then
+			table.SortByMember(Tbl, "Rent", true)
+		end
 		for i, v in pairs(Tbl) do
 			if CurrentHeader == "Rent" then
 				if v.Business or v.Warehouse or v.Rent == 0 or v.Rent < GetSearchTerm("MinPrice", 0) or v.Rent > GetSearchTerm("MaxPrice", math.huge) then
@@ -625,12 +609,25 @@ net.Receive("PropertiesMenuNet", function(Len, Plr)
 			New.TextureKey = 1
 			New.FadeStart = 0
 			New.Current = 0
+
+			function New:DrawButton(x, y, sx, sy, Text, MX, MY)
+				surface.DrawTexturedRect(x, y, sx, sy)
+				EfficientText(Text, x + sx / 2, y + sy / 2, true)
+				if MX > x and MX < x + sx and MY > y and MY < y + sy then
+					self.Button = Text
+					self:SetCursor("hand")
+					return true
+				end
+				return false
+			end
+
+			local Price = (CurrentHeader == "Sale" or CurrentHeader == "Business") and DarkRP.formatMoney(v.Price) or DarkRP.formatMoney(v.Rent) .. " per month, down payment of " .. DarkRP.formatMoney(v.Rent / 2)
 			function New:Paint(w, h)
 				surface.SetDrawColor(245, 245, 245, 255)
 				surface.DrawRect(0, 0, w, h)
 
 				surface.SetDrawColor(230, 120, 50, 255)
-				surface.DrawRect(0, h * 0.7 - 2, h * 1.1, h)
+				surface.DrawRect(0, h * 0.7 - 2, h * 1.1, h * 0.3 + 2)
 
 				surface.SetDrawColor(255, 255, 255, 255)
 				if SysTime() - self.FadeStart < 0.3 then
@@ -668,21 +665,23 @@ net.Receive("PropertiesMenuNet", function(Len, Plr)
 					end
 				end
 				render.SetScissorRect(0, 0, 0, 0, false)
-				local px, py = w * 0.975, h - w * 0.025
-				surface.SetMaterial(MapMaterial)
-				surface.DrawTexturedRect(px, py, w * 0.025 - 2, w * 0.025 - 2)
-				if MX > px and MX < px + w * 0.025 and MY > py and MY < py + w * 0.025 then
+
+				surface.SetFont("RealtorFont")
+				surface.SetTextColor(245, 245, 245, 255)
+
+				surface.SetDrawColor(230, 120, 50, 255)
+				draw.NoTexture()
+				self:DrawButton(h * 1.15, h * 0.7 - 2, w * 0.2, h * 0.3 + 2, "Buy", MX, MY)
+				local Success = self:DrawButton(h * 1.2 + w * 0.2, h * 0.7 - 2, w * 0.2, h * 0.3 + 2, "Show on map", MX, MY)
+				if Success then
 					self.Current = x
-					self.Button = "Map"
-					self:SetCursor("hand")
 				end
+
 				if not self.Button then
 					self:SetCursor("none")
 				end
 
-				surface.SetFont("RealtorFont")
 				surface.SetTextColor(150, 0, 0, 255)
-				local Price = (CurrentHeader == "Sale" or CurrentHeader == "Business") and DarkRP.formatMoney(v.Price) or DarkRP.formatMoney(v.Rent) .. " per month, down payment of " .. DarkRP.formatMoney(v.Rent / 2)
 				EfficientText(Price, h * 1.15, 15)
 
 				surface.SetFont("RealtorFontSmall")
@@ -698,8 +697,10 @@ net.Receive("PropertiesMenuNet", function(Len, Plr)
 						self.OldTextureKey = self.TextureKey
 						self.TextureKey = self.Current
 						self.FadeStart = SysTime()
-					elseif self.Button == "Map" then
-						LocalPlayer():ConCommand("greymap_open " .. (v.Start.x + v.End.x) / 2 .. " " .. (v.Start.y + v.End.x) / 2)
+					elseif self.Button == "Show on map" then
+						LocalPlayer():ConCommand("greymap_open " .. (v.Start.x + v.End.x) / 2 .. " " .. (v.Start.y + v.End.y) / 2)
+					elseif self.Button == "Buy" then
+						Derma_Query("Really buy this property for " .. Price:gsub("month, down ", "month with an immediate ") .. "?", "Purchase confirmation", "Yes", function() end, "No")
 					end
 				end
 			end

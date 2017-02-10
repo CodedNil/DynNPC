@@ -50,7 +50,7 @@ function GreyRP:SetupMapPanel(sx, sy, sz, Id)
 	self.Zoom = sz
 
 	function self:GetVector()
-		return Vector(self.TransY, self.TransX, 1600)
+		return Vector(self.TransY, self.TransX, 2700)
 	end
 
 	function self:SetTrans(x, y)
@@ -77,11 +77,12 @@ function GreyRP:SetupMapPanel(sx, sy, sz, Id)
 	end
 
 	function self:Paint(w, h)
-		if RealTime() - self.LastUpdate > 0.5 then
+		if RealTime() - self.LastUpdate > 0.5 and self.LastUpdateVec ~= self:GetVector() then
 			net.Start("MapPositionData")
 				net.WriteVector(self:GetVector())
 			net.SendToServer()
 			self.LastUpdate = RealTime()
+			self.LastUpdateVec = self:GetVector()
 		end
 		if not self.Dragging then
 			if input.IsKeyDown(KEY_W) or input.IsKeyDown(KEY_UP) then
@@ -235,6 +236,12 @@ local function OpenMenu(x, y, z)
 	Menu:SetSizable(true)
 	Menu:MakePopup()
 	Menu.lblTitle:SetFont("DYNNPC_FONT_LARGE")
+	Menu.btnMaxim:SetVisible(false)
+	Menu.btnMinim:SetVisible(false)
+	Menu.btnClose:SetZPos(100)
+	function Menu.btnClose:Paint(w, h)
+		draw.RoundedBoxEx(8, 0, 2, w, 16, Color(220, 80, 80), false, true, true, false)
+	end
 	function Menu:Paint(w, h)
 		draw.RoundedBoxEx(8, 0, 0, w, 24, Color(32, 178, 170, 255), false, true, false, false)
 		draw.RoundedBoxEx(8, 0, 24, w, h - 24, Color(245, 245, 245, 255), false, false, true, false)
